@@ -3,7 +3,7 @@ import logo from './logo.svg';
 import './App.css';
 
 import PropTypes from 'prop-types';
-import { Grid, Card, CardContent, Button, TextField, FormControl, InputLabel, MenuItem, Select }
+import { Grid, Card, CardContent, Button, TextField, FormControl, InputLabel, MenuItem, Select, Divider }
   from "@material-ui/core";
 import { createMuiTheme, MuiThemeProvider, withStyles } from "@material-ui/core/styles";
 import { blue } from '@material-ui/core/colors';
@@ -30,9 +30,14 @@ const styles = theme => ({
   root: {
     display: 'flex',
     flexWrap: 'wrap',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    border: 'solid red 1px',
+  },
+  container: {
+    display: 'flex',
     width: 400,
-    marginLeft: 'auto',
-    marginRight: 'auto',
     marginTop: theme.spacing.unit * 8,
     border: 'solid black 1px',
   },
@@ -44,6 +49,7 @@ const styles = theme => ({
     marginTop: theme.spacing.unit * 2,
   },
   item: {
+    display: 'flex',
     border: 'solid black 1px',
   }
 });
@@ -100,8 +106,9 @@ class App extends Component {
     const { classes } = this.props;
 
     return (
-      <form>
-        <Grid container className={classes.root}>
+      <div className={classes.root}>
+      {/* <form> */}
+        <Grid container className={classes.container}>
           <Grid item sm className={classes.item}>
             <FormControl className={classes.formControl}>
               <InputLabel htmlFor="methodName">Method Name</InputLabel>
@@ -132,21 +139,68 @@ class App extends Component {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item sm-12 className={classes.item}>
-            <TextField
+          </Grid>
+          <Divider variant="middle" />
+          <Grid container className={classes.container}>
+          <Grid item sm={12} className={classes.item}>
+            <TextField className={classes.formControl}
               id="standard-multiline-static"
               label="Multiline"
               multiline
+              fullWidth
               rows="4"
               defaultValue="Default Value"
-              className={classes.textField}
               margin="normal"
               variant="outlined"
             />
           </Grid>
+          </Grid>
+          
+          <Divider variant="middle" />
+          <Grid container className={classes.container}>
+          <Grid item sm>
+            <TextField className={classes.formControl}
+              id="numOfTopics"
+              label="Number of Topics"
+              type="number"
+              defaultValue="4"
+              margin="normal"
+              helperText="beta value of the topic function"
+            />
+          </Grid>
+          <Grid item sm>
+            <TextField className={classes.formControl}
+              id="s"
+              label="Topic Divider"
+              type="number"
+              defaultValue="0"
+              margin="normal"
+              helperText="beta value of the topic function"
+            />
+          </Grid>
+          <Grid item sm>
+            <TextField className={classes.formControl}
+              id="s"
+              label="Max Iteration"
+              type="number"
+              defaultValue="22"
+              margin="normal"
+              helperText="beta value of the topic function"
+            />
+          </Grid>
+          <Grid item sm>
+            <TextField className={classes.formControl}
+              id="s"
+              label="Beta"
+              type="number"
+              defaultValue="1"
+              margin="normal"
+              helperText="beta value of the topic function"
+            />
+          </Grid>
         </Grid>
-      </form>
-
+      {/* </form> */}
+      </div>
     );
   }
 }
