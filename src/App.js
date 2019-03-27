@@ -2,6 +2,8 @@ import React, {Component} from 'react';
 import logo from './logo.svg';
 import './App.css';
 
+import DatasetUpload from './DatasetUploaderHelper';
+
 import PropTypes from 'prop-types';
 import {
     Grid, Card, CardContent, Button, TextField, FormControl, InputLabel, MenuItem, Select, Divider, Icon, FormHelperText
@@ -166,6 +168,36 @@ class App extends Component {
         });
     }
 
+    renderDataInput(classes) {
+        if (this.state.inputFormType === InputType.Text) {
+            return <TextField className={classes.formControl}
+                              id={InputType.Text}
+                              name={InputType.Text}
+                              label="Text Input"
+                              multiline
+                              fullWidth
+                              rows="6"
+                              value={this.state[InputType.Text]}
+                              margin="normal"
+                              variant="outlined"
+                              onChange={this.handleFormUpdate}
+                              error={Boolean(this.state.errors[InputType.Text])}
+                              helperText={this.state.errors[InputType.Text]}
+            />;
+        } else if (this.state.inputFormType === InputType.File) {
+            return <DatasetUpload className={classes.formControl}
+                                  uploadedFile={this.state.datasetFile}
+                                  handleFileUpload={this.handleFileUpload}
+                                  fileAccept={this.state.fileAccept}
+                                  // setValidationStatus={valid =>
+                                  //     this.setValidationStatus("datasetFile", valid)
+                                  // }
+            />;
+        } else {
+            return <div>Select an appropriate type</div>
+        }
+    }
+
     handleFormUpdate(event) {
         const event_target_name = event.target.name;
         const event_target_value = event.target.value;
@@ -187,12 +219,24 @@ class App extends Component {
             }
 
             if (event_target_name === 'methodName' && this.state.inputFormType === InputType.Text) {
-                let default_val = document.getElementById(InputType.Text);
-                default_val.value = DefaultInputs.docs;
+                this.setState({[InputType.Text]: DefaultInputs.docs});
+                this.setErrorState({[InputType.Text]: null}); // discard error if there was one
             }
         });
+    }
 
-
+    handleFileUpload(file) {
+        const fileReader = new FileReader();
+        fileReader.readAsDataURL(file);
+        fileReader.onload = () => {
+            let encoded = fileReader.result.replace(/^data:(.*;base64,)?/, "");
+            encoded.length % 4 > 0 &&
+            (encoded += "=".repeat(4 - (encoded.length % 4)));
+            let user_value = this.validateJSON(atob(encoded));
+            let condition = this.validateValues(user_value);
+            this.setValidationStatus("validJSON", condition);
+            this.setState({datasetFile: file});
+        };
     }
 
     validateRequest(event) {
@@ -372,20 +416,7 @@ class App extends Component {
                         <Divider variant="middle" className={classes.divider}/>
                         <Grid container className={classes.container}>
                             <Grid item sm={12} className={classes.item}>
-                                <TextField className={classes.formControl}
-                                           id={InputType.Text}
-                                           name={InputType.Text}
-                                           label="Text Input"
-                                           multiline
-                                           fullWidth
-                                           rows="6"
-                                           value={this.state[InputType.Text]}
-                                           margin="normal"
-                                           variant="outlined"
-                                           onChange={this.handleFormUpdate}
-                                           error={Boolean(this.state.errors[InputType.Text])}
-                                           helperText={this.state.errors[InputType.Text]}
-                                />
+                                {this.renderDataInput(classes)}
                             </Grid>
                         </Grid>
 
