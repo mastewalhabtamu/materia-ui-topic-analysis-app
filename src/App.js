@@ -6,10 +6,23 @@ import DatasetUpload from './DatasetUploaderHelper';
 
 import PropTypes from 'prop-types';
 import {
-    Grid, Card, CardContent, Button, TextField, FormControl, InputLabel, MenuItem, Select, Divider, Icon, FormHelperText
+    Grid,
+    Card,
+    CardContent,
+    Button,
+    TextField,
+    FormControl,
+    InputLabel,
+    MenuItem,
+    Select,
+    Divider,
+    Icon,
+    FormHelperText,
+    Typography
 }
     from "@material-ui/core";
 import {createMuiTheme, MuiThemeProvider, withStyles} from "@material-ui/core/styles";
+import classNames from 'classnames';
 import {blue} from '@material-ui/core/colors';
 import ResetIcon from '@material-ui/icons/Autorenew';
 import ValidateIcon from '@material-ui/icons/LineStyle';
@@ -48,9 +61,9 @@ const styles = theme => ({
     container: {
         display: 'flex',
         width: 500,
-        marginTop: theme.spacing.unit * 2,
-        marginBottom: theme.spacing.unit * 2,
-        border: 'solid black 1px',
+        marginTop: theme.spacing.unit,
+        marginBottom: theme.spacing.unit,
+        // border: 'solid black 1px',
     },
     formControl: {
         margin: theme.spacing.unit * 2,
@@ -62,7 +75,7 @@ const styles = theme => ({
     item: {
         display: 'flex',
         justifyContent: 'center',
-        border: 'solid black 1px',
+        // border: 'solid black 1px',
     },
     divider: {
         width: 380,
@@ -74,6 +87,12 @@ const styles = theme => ({
         marginRight: theme.spacing.unit,
         fontSize: 20,
     },
+    error: {
+        color: '#f44336',
+    },
+    centerText: {
+        textAlign: 'center',
+    }
 });
 
 const theme = createMuiTheme({
@@ -93,7 +112,6 @@ class App extends Component {
 
         // setup validators for each form input
         this.validateTextInput = this.validateTextInput.bind(this);
-        this.validateFileInput = this.validateFileInput.bind(this);
         this.validateNumOfTopics = this.validateNumOfTopics.bind(this);
         this.validateTopicDivider = this.validateTopicDivider.bind(this);
         this.validateMaxIter = this.validateMaxIter.bind(this);
@@ -110,11 +128,9 @@ class App extends Component {
         this.validateText = this.validateText.bind(this);
         this.validateAllValues = this.validateAllValues.bind(this);
         this.createJSONRequest = this.createJSONRequest.bind(this);
-        this.validateRequest = this.validateRequest.bind(this);
 
         this.state = this.getInitialState();
 
-        this.setValidationStatus = this.setValidationStatus.bind(this);
         this.handleFileUpload = this.handleFileUpload.bind(this);
         this.submitAction = this.submitAction.bind(this);
         this.resetInternalState = this.resetInternalState.bind(this);
@@ -154,9 +170,7 @@ class App extends Component {
     // since error state is a nested object in state, it needs some workaround
     setErrorState(partial_errors) {
         let nested_error_object = {...this.state.errors};
-        console.log('nested error object:', nested_error_object);
         Object.assign(nested_error_object, partial_errors);
-        console.log('updated error object:', nested_error_object);
         this.setState({errors: nested_error_object});
     }
 
@@ -194,16 +208,24 @@ class App extends Component {
                               helperText={this.state.errors[InputType.Text]}
             />;
         } else if (this.state.inputType === InputType.File) {
-            return <DatasetUpload className={classes.formControl}
-                                  uploadedFile={this.state.datasetFile}
-                                  handleFileUpload={this.handleFileUpload}
-                                  fileAccept={this.state.fileAccept}
-                                  setValidationStatus={valid =>
-                                     this.setValidationStatus("datasetFile", valid)
-                                  }
-            />;
+            return (<div className={classes.formControl}>
+                <DatasetUpload uploadedFile={this.state.datasetFile}
+                               handleFileUpload={this.handleFileUpload}
+                               fileAccept={this.state.fileAccept}
+
+                />
+                {
+                    this.state.errors[InputType.File] &&
+                    <FormHelperText error className={classes.centerText}>
+                        {this.state.errors[InputType.File]}
+                    </FormHelperText>
+                }
+            </div>)
+                ;
         } else {
-            return <div>Select an appropriate type</div>
+            return <Typography variant='body1' className={classNames(classes.formControl, classes.centerText)}>
+                Select an appropriate input type
+            </Typography>
         }
     }
 
@@ -230,20 +252,15 @@ class App extends Component {
     }
 
     handleFileUpload(file) {
-        if (!file || !file.type.match(this.state.fileAccept)){
-            console.log('*.txt not matched');
+        if (!file || !file.type.match(this.state.fileAccept)) {
             this.setErrorState({
-                [InputType.File]: `Incorrect file type. Supported file type is ${this.state.fileAccept}`
+                [InputType.File]: `Incorrect file type selected. Supported file type is ${this.state.fileAccept}`
             });
             this.setState({datasetFile: null});
         } else {
-            console.log('*.txt matched');
             const fileReader = new FileReader();
             fileReader.onload = (e) => {
                 let textContent = e.target.result;
-                console.log('file', file);
-                console.log('target', e.target);
-                console.log('txt', textContent);
                 let state_error = this.validateText(InputType.File, textContent);
                 if (state_error[InputType.File]) {
                     this.setErrorState(state_error);
@@ -265,63 +282,23 @@ class App extends Component {
         if (areAllValidInputs) {
             let json_values = {};
 
-            for(let parameter in Parameters) {
+            for (let parameter of Object.values(Parameters)) {
                 json_values[parameter] = parseInt(this.state[parameter]);
             }
 
             json_values.text = this.state.text;
-            json_values.methodName= this.state.methodName;
+            json_values.methodName = this.state.methodName;
 
-            return json_values;
+            return JSON.stringify(json_values);
         }
 
         return null;
     }
 
-    // Get expanded-name of a file
-    getFileExtension(fileName) {
-        var matches = fileName && fileName.match(/\.([^.]+)$/);
-        if (matches) {
-            return matches[1].toLowerCase();
-        }
-        return '';
-    }
-
-    setValidationStatus(key, valid) {
-        if (this.state.isValid[key] !== valid) {
-            this.setState(state => {
-                const isValid = Object.assign({}, state.isValid);
-                isValid[key] = valid;
-
-                return { 'isValid': isValid };
-            });
-        }
-    }
-
-    validateRequest(event) {
-        let string_area = document.getElementById(InputType.Text);
-        let value = string_area.value;
-
-        // Now in this section, we take the function and assert the values
-        let user_value = this.validateJSON(value);
-        if (user_value === undefined)
-            return;
-        let condition = this.validateValues(user_value);
-        if (condition) {
-            string_area.value = JSON.stringify(user_value, undefined, 4);
-            this.setState({
-                internal_error: ""
-            })
-        }
-        this.setValidationStatus("validJSON", condition);
-
-        event.preventDefault()
-    }
-
     validateAllValues() {
         // utilize all validators function since we have to validate everything
         let found_errors = {};
-        for(let parameter in Parameters) {
+        for (let parameter of Object.values(Parameters)) {
             let state_error = this.validators[parameter]();
             Object.assign(found_errors, state_error);
         }
@@ -340,59 +317,11 @@ class App extends Component {
         return Object.keys(found_errors).length === 0;
     }
 
-    validateValues(user_value) {
-        const user_value_keys = Object.keys(user_value);
-        const sample_keys = Object.keys(DefaultInputs);
-        let found_keys = sample_keys.every(r => user_value_keys.indexOf(r) > -1);
-        if (!found_keys) {
-            this.setState({
-                internal_error: "One or more of docs, num_topics, topic_divider, maxiter or beta is/are missing."
-            });
-        } else {
-            // Now let check the validation of the internal values.
-            if (user_value['docs'].length === 0) {
-                this.setState({
-                    internal_error: "Document or text number is zero"
-                });
-                return false;
-            }
-            if (parseInt(user_value['num_topics'], 10) < 1) {
-                this.setState({
-                    internal_error: "Num topics isn't big enough for analysis."
-                });
-                return false;
-            }
-            if (parseInt(user_value['topic_divider'], 10) < 0) {
-                this.setState({
-                    internal_error: "Topic divider is less than zero."
-                });
-                return false;
-            }
-            if (parseInt(user_value['maxiter'], 10) <= 0 || parseInt(user_value['maxiter'], 10) > 500) {
-                this.setState({
-                    internal_error: "Max iteration value (maxiter) should have a value greater than 0 and less than 501."
-                });
-                return false;
-            }
-            if (parseFloat(user_value['beta']) <= 0 || parseFloat(user_value['beta']) > 1) {
-                this.setState({
-                    internal_error: "Beta should have a value greater than 0 and less than or equal to 1."
-                });
-                return false;
-            }
-            this.setState({
-                dataset: user_value
-            });
-            return true;
-        }
-        return false;
-    }
-
     validateTextInput(text_arg) {
         return this.validateText(InputType.Text, this.state[InputType.Text]);
     }
 
-    validateText(inputType, textValue){
+    validateText(inputType, textValue) {
         if (textValue.trim().length === 0) {
             return {[inputType]: "Text can not be empty"};
         } else {
@@ -400,12 +329,8 @@ class App extends Component {
         }
     }
 
-    validateFileInput(file) {
-        ;
-    }
-
     validateNumOfTopics() {
-        var value = parseInt(this.state[Parameters.NumOfTopics]);
+        let value = parseInt(this.state[Parameters.NumOfTopics]);
 
         if (isNaN(value)) {
             return {[Parameters.NumOfTopics]: "Number of topics can not be Empty."};
@@ -418,33 +343,49 @@ class App extends Component {
     }
 
     validateTopicDivider() {
-        if (this.state[Parameters.TopicDivider] < 0) {
-            this.setErrorState(Parameters.TopicDivider, "Topic divider is less than zero.");
+        let value = parseInt(this.state[Parameters.TopicDivider]);
+
+        if (isNaN(value)) {
+            return {[Parameters.TopicDivider]: "Topic divider can not be Empty."};
+        } else if (value < 0) {
+            return {[Parameters.TopicDivider]: "Topic divider is less than zero."};
         } else {
-            this.setErrorState(Parameters.TopicDivider, null);
+            return {[Parameters.TopicDivider]: null};
         }
     }
 
     validateMaxIter() {
-        if (this.state[Parameters.MaxIter] <= 0 || this.state[Parameters.MaxIter] > 500) {
-            this.setErrorState(Parameters.MaxIter,
-                "Max iteration value (maxiter) should have a value greater than 0 and less than 501.");
+        let value = parseInt(this.state[Parameters.TopicDivider]);
+
+        if (isNaN(value)) {
+            return {[Parameters.MaxIter]: "Max iteration value can not be Empty."};
+        } else if (value <= 0 || value > 500) {
+            return {
+                [Parameters.MaxIter]:
+                    "Max iteration value (maxiter) should have a value greater than 0 and less than 501."
+            };
         } else {
-            this.setErrorState(Parameters.MaxIter, null);
+            return {[Parameters.MaxIter]: null};
         }
     }
 
     validateBeta() {
-        if (this.state[Parameters.Beta] <= 0 || this.state[Parameters.Beta] > 1) {
-            this.setState({
-                internal_error: "Beta should have a value greater than 0 and less than or equal to 1."
-            });
-            return false;
+        let value = parseInt(this.state[Parameters.Beta]);
+
+        if (isNaN(value)) {
+            return {[Parameters.Beta]: "Max iteration value can not be Empty."};
+        } else if (value <= 0 || value > 1) {
+            return {
+                [Parameters.Beta]: "Beta should have a value greater than 0 and less than or equal to 1."
+            };
+        } else {
+            return {[Parameters.Beta]: null};
         }
     }
 
     submitAction() {
-        let valid = this.validateAllValues();
+        let json = this.createJSONRequest();
+        console.log('json', json);
     }
 
     render() {
@@ -514,32 +455,47 @@ class App extends Component {
                             </Grid>
                             <Grid item sm={6}>
                                 <TextField className={classes.formControl}
-                                           id="s"
+                                           id={Parameters.TopicDivider}
+                                           name={Parameters.TopicDivider}
                                            label="Topic Divider"
                                            type="number"
-                                           defaultValue="0"
                                            margin="normal"
-                                           helperText="Number of topic dividers"
+                                           value={this.state[Parameters.TopicDivider]}
+                                           onChange={this.handleFormUpdate}
+                                           error={Boolean(this.state.errors[Parameters.TopicDivider])}
+                                           helperText={(Boolean(this.state.errors[Parameters.TopicDivider]))
+                                               ? this.state.errors[Parameters.TopicDivider]
+                                               : "Number of topic dividers"}
                                 />
                             </Grid>
                             <Grid item sm={6}>
                                 <TextField className={classes.formControl}
-                                           id="s"
+                                           id={Parameters.MaxIter}
+                                           name={Parameters.MaxIter}
                                            label="Max Iteration"
                                            type="number"
-                                           defaultValue="22"
                                            margin="normal"
-                                           helperText="Maximum number of Iteration"
+                                           value={this.state[Parameters.MaxIter]}
+                                           onChange={this.handleFormUpdate}
+                                           error={Boolean(this.state.errors[Parameters.MaxIter])}
+                                           helperText={(Boolean(this.state.errors[Parameters.MaxIter]))
+                                               ? this.state.errors[Parameters.MaxIter]
+                                               : "Maximum number of Iteration"}
                                 />
                             </Grid>
                             <Grid item sm={6}>
                                 <TextField className={classes.formControl}
-                                           id="s"
+                                           id={Parameters.Beta}
+                                           name={Parameters.Beta}
                                            label="Beta"
                                            type="number"
-                                           defaultValue="1"
                                            margin="normal"
-                                           helperText="beta value of the topic function"
+                                           value={this.state[Parameters.Beta]}
+                                           onChange={this.handleFormUpdate}
+                                           error={Boolean(this.state.errors[Parameters.Beta])}
+                                           helperText={(Boolean(this.state.errors[Parameters.Beta]))
+                                               ? this.state.errors[Parameters.Beta]
+                                               : "beta value of the topic function"}
                                 />
                             </Grid>
                         </Grid>
