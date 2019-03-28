@@ -18,7 +18,7 @@ import CallIcon from '@material-ui/icons/SettingsRemote';
 const InputType = {File: 'File Upload', Text: 'Textual Input'};
 const Parameters = {
     NumOfTopics: 'Number of Topics', TopicDivider: 'Topic Divider', MaxIter: 'Max Iteration', Beta: 'Beta'
-}
+};
 const DefaultInputs = {
     "docs": ["Toward Democratic, Lawful Citizenship for AIs, Robots, and Corporations",
         "Dr. Ben Goertzel, CEO of SingularityNET, shares his thoughts about the AI Citizenship Test",
@@ -93,22 +93,29 @@ class App extends Component {
 
         // setup validators for each form input
         this.validateTextInput = this.validateTextInput.bind(this);
+        this.validateFileInput = this.validateFileInput.bind(this);
         this.validateNumOfTopics = this.validateNumOfTopics.bind(this);
         this.validateTopicDivider = this.validateTopicDivider.bind(this);
         this.validateMaxIter = this.validateMaxIter.bind(this);
         this.validateBeta = this.validateBeta.bind(this);
         this.validators = {
             [InputType.Text]: this.validateTextInput,
+            [InputType.File]: this.validateFileInput,
             [Parameters.NumOfTopics]: this.validateNumOfTopics,
             [Parameters.TopicDivider]: this.validateTopicDivider,
             [Parameters.MaxIter]: this.validateMaxIter,
             [Parameters.Beta]: this.validateBeta,
         };
-        this.validateAll = this.validateAll.bind(this);
+
+        this.validateText = this.validateText.bind(this);
+        this.validateAllValues = this.validateAllValues.bind(this);
+        this.createJSONRequest = this.createJSONRequest.bind(this);
         this.validateRequest = this.validateRequest.bind(this);
 
         this.state = this.getInitialState();
 
+        this.setValidationStatus = this.setValidationStatus.bind(this);
+        this.handleFileUpload = this.handleFileUpload.bind(this);
         this.submitAction = this.submitAction.bind(this);
         this.resetInternalState = this.resetInternalState.bind(this);
     }
@@ -117,6 +124,8 @@ class App extends Component {
         return {
             serviceName: "TopicAnalysis",
             methodName: "Select a method",
+
+            text: '',
 
             // form inputs
             [InputType.Text]: '',
@@ -135,9 +144,9 @@ class App extends Component {
                 datasetFile: false,
                 validJSON: false,
             },
-            fileAccept: ".json",
+            fileAccept: "text/plain",
             internal_error: "",
-            inputFormType: InputType.Text,
+            inputType: InputType.Text,
         }
     };
 
@@ -169,7 +178,7 @@ class App extends Component {
     }
 
     renderDataInput(classes) {
-        if (this.state.inputFormType === InputType.Text) {
+        if (this.state.inputType === InputType.Text) {
             return <TextField className={classes.formControl}
                               id={InputType.Text}
                               name={InputType.Text}
@@ -184,14 +193,14 @@ class App extends Component {
                               error={Boolean(this.state.errors[InputType.Text])}
                               helperText={this.state.errors[InputType.Text]}
             />;
-        } else if (this.state.inputFormType === InputType.File) {
+        } else if (this.state.inputType === InputType.File) {
             return <DatasetUpload className={classes.formControl}
                                   uploadedFile={this.state.datasetFile}
                                   handleFileUpload={this.handleFileUpload}
                                   fileAccept={this.state.fileAccept}
-                                  // setValidationStatus={valid =>
-                                  //     this.setValidationStatus("datasetFile", valid)
-                                  // }
+                                  setValidationStatus={valid =>
+                                     this.setValidationStatus("datasetFile", valid)
+                                  }
             />;
         } else {
             return <div>Select an appropriate type</div>
@@ -206,11 +215,6 @@ class App extends Component {
             [event_target_name]: event_target_value
         }, () => {
             // run validation and other codes after ensuring state is updated
-            console.log('waited state:', this.state);
-
-            console.log(event_target_name);
-            console.log(this.validators[event_target_name]);
-            console.log(Object.keys(this.validators));
             if (event_target_name in this.validators) {
                 console.log('validation performed');
                 // validate form input change
@@ -218,7 +222,7 @@ class App extends Component {
                 this.setErrorState(state_error);
             }
 
-            if (event_target_name === 'methodName' && this.state.inputFormType === InputType.Text) {
+            if (event_target_name === 'methodName' && this.state.inputType === InputType.Text) {
                 this.setState({[InputType.Text]: DefaultInputs.docs});
                 this.setErrorState({[InputType.Text]: null}); // discard error if there was one
             }
@@ -226,17 +230,72 @@ class App extends Component {
     }
 
     handleFileUpload(file) {
-        const fileReader = new FileReader();
-        fileReader.readAsDataURL(file);
-        fileReader.onload = () => {
-            let encoded = fileReader.result.replace(/^data:(.*;base64,)?/, "");
-            encoded.length % 4 > 0 &&
-            (encoded += "=".repeat(4 - (encoded.length % 4)));
-            let user_value = this.validateJSON(atob(encoded));
-            let condition = this.validateValues(user_value);
-            this.setValidationStatus("validJSON", condition);
-            this.setState({datasetFile: file});
-        };
+        if (!file || !file.type.match(this.state.fileAccept)){
+            console.log('*.txt not matched');
+            this.setErrorState({
+                [InputType.File]: `Incorrect file type. Supported file type is ${this.state.fileAccept}`
+            });
+            this.setState({datasetFile: null});
+        } else {
+            console.log('*.txt matched');
+            const fileReader = new FileReader();
+            fileReader.onload = (e) => {
+                let textContent = e.target.result;
+                console.log('file', file);
+                console.log('target', e.target);
+                console.log('txt', textContent);
+                let state_error = this.validateText(InputType.File, textContent);
+                if (state_error[InputType.File]) {
+                    this.setErrorState(state_error);
+                    this.setState({datasetFile: null});
+                } else {
+                    this.setState({datasetFile: file});
+                }
+            };
+
+            fileReader.readAsText(file);
+        }
+
+    }
+
+    createJSONRequest() {
+        let areAllValidInputs = this.validateAllValues();
+
+
+        if (areAllValidInputs) {
+            let json_values = {};
+
+            for(let parameter in Parameters) {
+                json_values[parameter] = parseInt(this.state[parameter]);
+            }
+
+            json_values.text = this.state.text;
+            json_values.methodName= this.state.methodName;
+
+            return json_values;
+        }
+
+        return null;
+    }
+
+    // Get expanded-name of a file
+    getFileExtension(fileName) {
+        var matches = fileName && fileName.match(/\.([^.]+)$/);
+        if (matches) {
+            return matches[1].toLowerCase();
+        }
+        return '';
+    }
+
+    setValidationStatus(key, valid) {
+        if (this.state.isValid[key] !== valid) {
+            this.setState(state => {
+                const isValid = Object.assign({}, state.isValid);
+                isValid[key] = valid;
+
+                return { 'isValid': isValid };
+            });
+        }
     }
 
     validateRequest(event) {
@@ -259,18 +318,26 @@ class App extends Component {
         event.preventDefault()
     }
 
-    validateAll() {
+    validateAllValues() {
         // utilize all validators function since we have to validate everything
-        const validators = Object.values(this.validators);
-        const found_errors = {};
-        for (let validator of validators) {
-            let state_error = validator();
+        let found_errors = {};
+        for(let parameter in Parameters) {
+            let state_error = this.validators[parameter]();
             Object.assign(found_errors, state_error);
         }
+
+        if (this.state.inputType === InputType.Text) {
+            let state_error = this.validators[InputType.Text]();
+            Object.assign(found_errors, state_error);
+        } else if (this.state.inputType === InputType.File) {
+            let state_error = this.validateText(this.state.text);
+            Object.assign(found_errors, state_error);
+        }
+
         this.setErrorState(found_errors);
 
         // check if there is an error property or errors object is empty
-        return Object.keys(this.state.errors).length === 0;
+        return Object.keys(found_errors).length === 0;
     }
 
     validateValues(user_value) {
@@ -321,12 +388,20 @@ class App extends Component {
         return false;
     }
 
-    validateTextInput() {
-        if (this.state[InputType.Text].trim().length === 0) {
-            return {[InputType.Text]: "Text can not be empty"};
+    validateTextInput(text_arg) {
+        return this.validateText(InputType.Text, this.state[InputType.Text]);
+    }
+
+    validateText(inputType, textValue){
+        if (textValue.trim().length === 0) {
+            return {[inputType]: "Text can not be empty"};
         } else {
-            return {[InputType.Text]: null};
+            return {[inputType]: null};
         }
+    }
+
+    validateFileInput(file) {
+        ;
     }
 
     validateNumOfTopics() {
@@ -369,7 +444,7 @@ class App extends Component {
     }
 
     submitAction() {
-        let valid = this.validateAll();
+        let valid = this.validateAllValues();
     }
 
     render() {
@@ -401,11 +476,11 @@ class App extends Component {
                                 <FormControl margin='normal' className={classes.formControl}>
                                     <InputLabel htmlFor="inputFormType">Input Type</InputLabel>
                                     <Select
-                                        value={this.state.inputFormType}
+                                        value={this.state.inputType}
                                         onChange={this.handleFormUpdate}
                                         inputProps={{
-                                            name: 'inputFormType',
-                                            id: 'inputFormType',
+                                            name: 'inputType',
+                                            id: 'inputType',
                                         }}
                                     >
                                         {this.renderMuiFormInput()}
@@ -472,7 +547,7 @@ class App extends Component {
                         <Grid container className={classes.container}>
                             <Grid item sm={6} className={classes.item}>
                                 <Button variant="contained" color="primary" className={classes.button}
-                                        onClick={this.validateAll}>
+                                        onClick={this.validateAllValues}>
                                     <ValidateIcon className={classes.leftIcon}/>
                                     Validate Input
                                 </Button>
