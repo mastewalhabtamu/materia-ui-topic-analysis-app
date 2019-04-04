@@ -1,9 +1,8 @@
-import React, {Component} from 'react';
+import React, { Component } from 'react';
 import logo from './logo.svg';
 import './App.css';
 
-import DatasetUpload from './DatasetUploaderHelper';
-
+import ReactJson from 'react-json-view';
 import PropTypes from 'prop-types';
 import {
     Grid,
@@ -21,14 +20,16 @@ import {
     Typography
 }
     from "@material-ui/core";
-import {createMuiTheme, MuiThemeProvider, withStyles} from "@material-ui/core/styles";
 import classNames from 'classnames';
-import {blue} from '@material-ui/core/colors';
+import { createMuiTheme, MuiThemeProvider, withStyles, withTheme } from "@material-ui/core/styles";
+import { blue } from '@material-ui/core/colors';
+import { CheckCircle, Cancel } from "@material-ui/icons";
 import ResetIcon from '@material-ui/icons/Autorenew';
 import ValidateIcon from '@material-ui/icons/LineStyle';
 import CallIcon from '@material-ui/icons/SettingsRemote';
+import TextUploader from "./TextUploader";
 
-const InputType = {File: 'File Upload', Text: 'Textual Input'};
+const InputType = { File: 'File Upload', Text: 'Textual Input' };
 const Parameters = {
     NumOfTopics: 'Number of Topics', TopicDivider: 'Topic Divider', MaxIter: 'Max Iteration', Beta: 'Beta'
 };
@@ -56,11 +57,11 @@ const styles = theme => ({
         flexDirection: 'column',
         justifyContent: 'center',
         alignItems: 'center',
-        border: 'solid red 1px',
+        // border: 'solid red 1px',
     },
     container: {
         display: 'flex',
-        width: 500,
+        width: '100%',
         marginTop: theme.spacing.unit,
         marginBottom: theme.spacing.unit,
         // border: 'solid black 1px',
@@ -68,6 +69,7 @@ const styles = theme => ({
     formControl: {
         margin: theme.spacing.unit * 2,
         minWidth: 120,
+        width: '100%',
     },
     selectEmpty: {
         marginTop: theme.spacing.unit * 2,
@@ -78,7 +80,9 @@ const styles = theme => ({
         // border: 'solid black 1px',
     },
     divider: {
-        width: 380,
+        width: '90%',
+        marginLeft: 'auto',
+        marginRight: 'auto',
     },
     button: {
         margin: theme.spacing.unit,
@@ -101,12 +105,15 @@ const theme = createMuiTheme({
     },
     typography: {
         useNextVariants: true,
+        fontSize: 20,
     },
 });
 
-class App extends Component {
+
+class TopicAnalysisService extends React.Component {
     constructor(props) {
         super(props);
+        this.download = this.download.bind(this);
 
         this.handleFormUpdate = this.handleFormUpdate.bind(this);
 
@@ -118,7 +125,6 @@ class App extends Component {
         this.validateBeta = this.validateBeta.bind(this);
         this.validators = {
             [InputType.Text]: this.validateTextInput,
-            [InputType.File]: this.validateFileInput,
             [Parameters.NumOfTopics]: this.validateNumOfTopics,
             [Parameters.TopicDivider]: this.validateTopicDivider,
             [Parameters.MaxIter]: this.validateMaxIter,
@@ -131,7 +137,7 @@ class App extends Component {
 
         this.state = this.getInitialState();
 
-        this.handleFileUpload = this.handleFileUpload.bind(this);
+        this.handleUploadedTexts = this.handleUploadedTexts.bind(this);
         this.submitAction = this.submitAction.bind(this);
         this.resetInternalState = this.resetInternalState.bind(this);
     }
@@ -141,7 +147,7 @@ class App extends Component {
             serviceName: "TopicAnalysis",
             methodName: "Select a method",
 
-            text: '',
+            texts: [],
 
             // form inputs
             [InputType.Text]: '',
@@ -169,9 +175,9 @@ class App extends Component {
     // set error state appropriately
     // since error state is a nested object in state, it needs some workaround
     setErrorState(partial_errors) {
-        let nested_error_object = {...this.state.errors};
+        let nested_error_object = this.state.errors;
         Object.assign(nested_error_object, partial_errors);
-        this.setState({errors: nested_error_object});
+        this.setState({ errors: nested_error_object });
     }
 
     resetInternalState() {
@@ -194,32 +200,26 @@ class App extends Component {
     renderDataInput(classes) {
         if (this.state.inputType === InputType.Text) {
             return <TextField className={classes.formControl}
-                              id={InputType.Text}
-                              name={InputType.Text}
-                              label="Text Input"
-                              multiline
-                              fullWidth
-                              rows="6"
-                              value={this.state[InputType.Text]}
-                              margin="normal"
-                              variant="outlined"
-                              onChange={this.handleFormUpdate}
-                              error={Boolean(this.state.errors[InputType.Text])}
-                              helperText={this.state.errors[InputType.Text]}
+                id={InputType.Text}
+                name={InputType.Text}
+                label="Text Input"
+                multiline
+                fullWidth
+                rows="6"
+                value={this.state[InputType.Text]}
+                margin="normal"
+                variant="outlined"
+                onChange={this.handleFormUpdate}
+                error={Boolean(this.state.errors[InputType.Text])}
+                helperText={this.state.errors[InputType.Text]}
             />;
         } else if (this.state.inputType === InputType.File) {
             return (<div className={classes.formControl}>
-                <DatasetUpload uploadedFile={this.state.datasetFile}
-                               handleFileUpload={this.handleFileUpload}
-                               fileAccept={this.state.fileAccept}
-
+                <TextUploader
+                    handleUploadeTexts={this.handleUploadedTexts}
+                    validateText={this.validateText}
+                    fileAccept={this.state.fileAccept}
                 />
-                {
-                    this.state.errors[InputType.File] &&
-                    <FormHelperText error className={classes.centerText}>
-                        {this.state.errors[InputType.File]}
-                    </FormHelperText>
-                }
             </div>)
                 ;
         } else {
@@ -245,34 +245,45 @@ class App extends Component {
             }
 
             if (event_target_name === 'methodName' && this.state.inputType === InputType.Text) {
-                this.setState({[InputType.Text]: DefaultInputs.docs});
-                this.setErrorState({[InputType.Text]: null}); // discard error if there was one
+                this.setState({ [InputType.Text]: DefaultInputs.docs });
+                this.setErrorState({ [InputType.Text]: null }); // discard error if there was one
             }
         });
     }
 
-    handleFileUpload(file) {
-        if (!file || !file.type.match(this.state.fileAccept)) {
-            this.setErrorState({
-                [InputType.File]: `Incorrect file type selected. Supported file type is ${this.state.fileAccept}`
-            });
-            this.setState({datasetFile: null});
-        } else {
-            const fileReader = new FileReader();
-            fileReader.onload = (e) => {
-                let textContent = e.target.result;
-                let state_error = this.validateText(InputType.File, textContent);
-                if (state_error[InputType.File]) {
-                    this.setErrorState(state_error);
-                    this.setState({datasetFile: null});
-                } else {
-                    this.setState({datasetFile: file});
-                }
-            };
+    handleUploadedTexts(texts){
+        console.log('handleUploadedTexts');
+    }
 
-            fileReader.readAsText(file);
+    handleFilesUpload(files) {
+        let found_errors = [];
+        let found_texts = [];
+        for (let file of files) {
+            if (!file || !file.type.match(this.state.fileAccept)) {
+                // this.setErrorState({
+                //     [InputType.File]: `File '${file.name}' is incorrect type. Supported file type is ${this.state.fileAccept}`
+                // });
+                // this.setState({ datasetFile: null });
+            } else {
+                const fileReader = new FileReader();
+                fileReader.onload = (e) => {
+                    let textContent = e.target.result;
+                    let state_error = this.validateText(InputType.File, textContent, e.target.name);
+                    if (state_error[InputType.File]) {
+                        // this.setErrorState({[InputType.File]: })
+                        found_errors.push(state_error[InputType.File]);
+                        this.setErrorState(state_error);
+                        this.setState({ datasetFile: null });
+                    } else {
+                        found_texts.push({[e.target.fileName]: e.target.result});
+                        this.setState({ datasetFile: file, text: textContent });
+                        this.setErrorState({ [InputType.File]: null });
+                    }
+                };
+
+                fileReader.readAsText(file);
+            }
         }
-
     }
 
     createJSONRequest() {
@@ -286,7 +297,12 @@ class App extends Component {
                 json_values[parameter] = parseInt(this.state[parameter]);
             }
 
-            json_values.text = this.state.text;
+            if (this.state.inputType === InputType.Text) {
+                json_values.texts = [this.state[InputType.Text]];
+            } else {
+                json_values.texts = this.state.texts
+            }
+
             json_values.methodName = this.state.methodName;
 
             return JSON.stringify(json_values);
@@ -297,7 +313,7 @@ class App extends Component {
 
     validateAllValues() {
         // utilize all validators function since we have to validate everything
-        let found_errors = {};
+        let found_errors = { [InputType.File]: [] };
         for (let parameter of Object.values(Parameters)) {
             let state_error = this.validators[parameter]();
             Object.assign(found_errors, state_error);
@@ -307,8 +323,12 @@ class App extends Component {
             let state_error = this.validators[InputType.Text]();
             Object.assign(found_errors, state_error);
         } else if (this.state.inputType === InputType.File) {
-            let state_error = this.validateText(this.state.text);
-            Object.assign(found_errors, state_error);
+            for (let text of this.state.texts) {
+                let state_error = this.validateText(InputType.File, text.content, text.fileName);
+                if (state_error[InputType.File]){
+                found_errors[InputType.File].push(state_error[InputType.file]);
+                }
+            }
         }
 
         this.setErrorState(found_errors);
@@ -321,11 +341,15 @@ class App extends Component {
         return this.validateText(InputType.Text, this.state[InputType.Text]);
     }
 
-    validateText(inputType, textValue) {
+    validateText(inputType, textValue, fileName) {
         if (textValue.trim().length === 0) {
-            return {[inputType]: "Text can not be empty"};
+            if (fileName) {
+                return { [inputType]: `File '${fileName}' is empty. Text should not be empty`}
+            } else {
+                return { [inputType]: "Text can not be empty" };
+            }
         } else {
-            return {[inputType]: null};
+            return { [inputType]: null };
         }
     }
 
@@ -333,11 +357,11 @@ class App extends Component {
         let value = parseInt(this.state[Parameters.NumOfTopics]);
 
         if (isNaN(value)) {
-            return {[Parameters.NumOfTopics]: "Number of topics can not be Empty."};
+            return { [Parameters.NumOfTopics]: "Number of topics can not be Empty." };
         } else if (value < 1) {
-            return {[Parameters.NumOfTopics]: "Number of topics isn't big enough for analysis."};
+            return { [Parameters.NumOfTopics]: "Number of topics isn't big enough for analysis." };
         } else {
-            return {[Parameters.NumOfTopics]: null};
+            return { [Parameters.NumOfTopics]: null };
         }
 
     }
@@ -346,26 +370,26 @@ class App extends Component {
         let value = parseInt(this.state[Parameters.TopicDivider]);
 
         if (isNaN(value)) {
-            return {[Parameters.TopicDivider]: "Topic divider can not be Empty."};
+            return { [Parameters.TopicDivider]: "Topic divider can not be Empty." };
         } else if (value < 0) {
-            return {[Parameters.TopicDivider]: "Topic divider is less than zero."};
+            return { [Parameters.TopicDivider]: "Topic divider is less than zero." };
         } else {
-            return {[Parameters.TopicDivider]: null};
+            return { [Parameters.TopicDivider]: null };
         }
     }
 
     validateMaxIter() {
-        let value = parseInt(this.state[Parameters.TopicDivider]);
+        let value = parseInt(this.state[Parameters.MaxIter]);
 
         if (isNaN(value)) {
-            return {[Parameters.MaxIter]: "Max iteration value can not be Empty."};
+            return { [Parameters.MaxIter]: "Max iteration value can not be Empty." };
         } else if (value <= 0 || value > 500) {
             return {
                 [Parameters.MaxIter]:
                     "Max iteration value (maxiter) should have a value greater than 0 and less than 501."
             };
         } else {
-            return {[Parameters.MaxIter]: null};
+            return { [Parameters.MaxIter]: null };
         }
     }
 
@@ -373,25 +397,49 @@ class App extends Component {
         let value = parseInt(this.state[Parameters.Beta]);
 
         if (isNaN(value)) {
-            return {[Parameters.Beta]: "Max iteration value can not be Empty."};
+            return { [Parameters.Beta]: "Max iteration value can not be Empty." };
         } else if (value <= 0 || value > 1) {
             return {
                 [Parameters.Beta]: "Beta should have a value greater than 0 and less than or equal to 1."
             };
         } else {
-            return {[Parameters.Beta]: null};
+            return { [Parameters.Beta]: null };
         }
     }
 
     submitAction() {
-        let json = this.createJSONRequest();
-        console.log('json', json);
+        this.props.callApiCallback(this.state.serviceName,
+            this.state.methodName, {
+                docs: this.state.dataset['docs'],
+                num_topics: this.state.dataset['num_topics'],
+                topic_divider: this.state.dataset['topic_divider'],
+                maxiter: this.state.dataset['maxiter'] === undefined ? '2' : this.state.dataset['maxiter'],
+                beta: this.state.dataset['beta'] === undefined ? "1" : this.state.dataset['beta']
+            });
     }
 
-    render() {
-        const {classes} = this.props;
+    canBeInvoked() {
+        return (this.state.methodName !== "Select a method") && this.state.isValid['validJSON'];
+    }
 
-        const serviceMethodNames = ['x_service', 'y_service'];
+    download() {
+        const link = document.createElement('a');
+        link.setAttribute("type", "hidden");
+        let resp = this.props.response;
+        resp['handle'] = "https://tz-services-1.snet.sh:2298/topic-analysis/api/v1.0/results?handle=" + resp['handle'];
+        link.setAttribute('href', "data:text/json," + JSON.stringify(resp));
+        link.setAttribute('download', 'result.json');
+        document.body.appendChild(link);
+        link.click();
+
+        link.remove();
+    }
+
+    renderForm() {
+        const { classes } = this.props;
+
+        // const service = this.props.protoSpec.findServiceByName(this.state.serviceName);
+        const serviceMethodNames = "service.methodNames";
 
         return (
             <MuiThemeProvider theme={theme}>
@@ -429,98 +477,98 @@ class App extends Component {
                                 </FormControl>
                             </Grid>
                         </Grid>
-                        <Divider variant="middle" className={classes.divider}/>
+                        <Divider variant="middle" className={classes.divider} />
                         <Grid container className={classes.container}>
                             <Grid item sm={12} className={classes.item}>
                                 {this.renderDataInput(classes)}
                             </Grid>
                         </Grid>
 
-                        <Divider variant="middle" className={classes.divider}/>
+                        <Divider variant="middle" className={classes.divider} />
                         <Grid container className={classes.container}>
-                            <Grid item sm={6}>
+                            <Grid item sm={6} className={classes.item}>
                                 <TextField className={classes.formControl}
-                                           id={Parameters.NumOfTopics}
-                                           name={Parameters.NumOfTopics}
-                                           label="Number of Topics"
-                                           type="number"
-                                           margin="normal"
-                                           value={this.state[Parameters.NumOfTopics]}
-                                           onChange={this.handleFormUpdate}
-                                           error={Boolean(this.state.errors[Parameters.NumOfTopics])}
-                                           helperText={(Boolean(this.state.errors[Parameters.NumOfTopics]))
-                                               ? this.state.errors[Parameters.NumOfTopics]
-                                               : "Number of topics to be extracted"}
+                                    id={Parameters.NumOfTopics}
+                                    name={Parameters.NumOfTopics}
+                                    label="Number of Topics"
+                                    type="number"
+                                    margin="normal"
+                                    value={this.state[Parameters.NumOfTopics]}
+                                    onChange={this.handleFormUpdate}
+                                    error={Boolean(this.state.errors[Parameters.NumOfTopics])}
+                                    helperText={(Boolean(this.state.errors[Parameters.NumOfTopics]))
+                                        ? this.state.errors[Parameters.NumOfTopics]
+                                        : "Number of topics to be extracted"}
                                 />
                             </Grid>
-                            <Grid item sm={6}>
+                            <Grid item sm={6} className={classes.item}>
                                 <TextField className={classes.formControl}
-                                           id={Parameters.TopicDivider}
-                                           name={Parameters.TopicDivider}
-                                           label="Topic Divider"
-                                           type="number"
-                                           margin="normal"
-                                           value={this.state[Parameters.TopicDivider]}
-                                           onChange={this.handleFormUpdate}
-                                           error={Boolean(this.state.errors[Parameters.TopicDivider])}
-                                           helperText={(Boolean(this.state.errors[Parameters.TopicDivider]))
-                                               ? this.state.errors[Parameters.TopicDivider]
-                                               : "Number of topic dividers"}
+                                    id={Parameters.TopicDivider}
+                                    name={Parameters.TopicDivider}
+                                    label="Topic Divider"
+                                    type="number"
+                                    margin="normal"
+                                    value={this.state[Parameters.TopicDivider]}
+                                    onChange={this.handleFormUpdate}
+                                    error={Boolean(this.state.errors[Parameters.TopicDivider])}
+                                    helperText={(Boolean(this.state.errors[Parameters.TopicDivider]))
+                                        ? this.state.errors[Parameters.TopicDivider]
+                                        : "Number of topic dividers"}
                                 />
                             </Grid>
-                            <Grid item sm={6}>
+                            <Grid item sm={6} className={classes.item}>
                                 <TextField className={classes.formControl}
-                                           id={Parameters.MaxIter}
-                                           name={Parameters.MaxIter}
-                                           label="Max Iteration"
-                                           type="number"
-                                           margin="normal"
-                                           value={this.state[Parameters.MaxIter]}
-                                           onChange={this.handleFormUpdate}
-                                           error={Boolean(this.state.errors[Parameters.MaxIter])}
-                                           helperText={(Boolean(this.state.errors[Parameters.MaxIter]))
-                                               ? this.state.errors[Parameters.MaxIter]
-                                               : "Maximum number of Iteration"}
+                                    id={Parameters.MaxIter}
+                                    name={Parameters.MaxIter}
+                                    label="Max Iteration"
+                                    type="number"
+                                    margin="normal"
+                                    value={this.state[Parameters.MaxIter]}
+                                    onChange={this.handleFormUpdate}
+                                    error={Boolean(this.state.errors[Parameters.MaxIter])}
+                                    helperText={(Boolean(this.state.errors[Parameters.MaxIter]))
+                                        ? this.state.errors[Parameters.MaxIter]
+                                        : "Maximum number of Iteration"}
                                 />
                             </Grid>
-                            <Grid item sm={6}>
+                            <Grid item sm={6} className={classes.item}>
                                 <TextField className={classes.formControl}
-                                           id={Parameters.Beta}
-                                           name={Parameters.Beta}
-                                           label="Beta"
-                                           type="number"
-                                           margin="normal"
-                                           value={this.state[Parameters.Beta]}
-                                           onChange={this.handleFormUpdate}
-                                           error={Boolean(this.state.errors[Parameters.Beta])}
-                                           helperText={(Boolean(this.state.errors[Parameters.Beta]))
-                                               ? this.state.errors[Parameters.Beta]
-                                               : "beta value of the topic function"}
+                                    id={Parameters.Beta}
+                                    name={Parameters.Beta}
+                                    label="Beta"
+                                    type="number"
+                                    margin="normal"
+                                    value={this.state[Parameters.Beta]}
+                                    onChange={this.handleFormUpdate}
+                                    error={Boolean(this.state.errors[Parameters.Beta])}
+                                    helperText={(Boolean(this.state.errors[Parameters.Beta]))
+                                        ? this.state.errors[Parameters.Beta]
+                                        : "beta value of the topic function"}
                                 />
                             </Grid>
                         </Grid>
-                        <Divider variant="middle" className={classes.divider}/>
+                        <Divider variant="middle" className={classes.divider} />
                         <Grid container className={classes.container}>
                             <Grid item sm={6} className={classes.item}>
                                 <Button variant="contained" color="primary" className={classes.button}
-                                        onClick={this.validateAllValues}>
-                                    <ValidateIcon className={classes.leftIcon}/>
+                                    onClick={this.validateAllValues}>
+                                    <ValidateIcon className={classes.leftIcon} />
                                     Validate Input
-                                </Button>
+                           </Button>
                             </Grid>
                             <Grid item sm={6} className={classes.item}>
                                 <Button variant="contained" color="primary" className={classes.button}
-                                        onClick={this.resetInternalState}>
-                                    <ResetIcon className={classes.leftIcon}/>
+                                    onClick={this.resetInternalState}>
+                                    <ResetIcon className={classes.leftIcon} />
                                     Reset Form
-                                </Button>
+                           </Button>
                             </Grid>
                             <Grid item sm={12} className={classes.item}>
                                 <Button variant="contained" color="primary" className={classes.button}
-                                        onClick={this.submitAction}>
-                                    <CallIcon className={classes.leftIcon}/>
+                                    onClick={this.submitAction}>
+                                    <CallIcon className={classes.leftIcon} />
                                     Call Topic Analysis
-                                </Button>
+                           </Button>
                             </Grid>
                         </Grid>
                     </form>
@@ -528,10 +576,84 @@ class App extends Component {
             </MuiThemeProvider>
         );
     }
+
+    renderComplete() {
+        let response = [this.props.response];
+
+        response['handle'] = "https://tz-services-1.snet.sh:2298/topic-analysis/api/v1.0/results?handle=" + response['handle'];
+        return (
+            <React.Fragment>
+                <Card
+                    style={{
+                        backgroundColor: "#deffde"
+                    }}
+                    elevation={0}
+                >
+                    <CardContent style={{ textAlign: "center" }}>
+                        <h4>
+                            <CheckCircle style={{ fontSize: "36px", color: "#54C21F", textAlign: "center" }} />
+                            <br />
+                            Analysis started!
+                        </h4>
+                        <p>Follow the link below to check the status of the analysis.</p>
+                        <p
+                            style={{
+                                marginTop: "15px",
+                                backgroundColor: "#fff",
+                                border: "5px",
+                                padding: "10px",
+                                borderRadius: "5px"
+                            }}
+                        >
+                            <a
+                                rel="noopener noreferrer"
+                                target="_blank"
+                                href={"https://tz-services-1.snet.sh:2298/topic-analysis/api/v1.0/results?handle=" + this.props.response['handle']}
+                            >
+                                {"https://tz-services-1.snet.sh:2298/topic-analysis/api/v1.0/results?handle=" + this.props.response['handle']}
+                            </a>
+                        </p>
+                    </CardContent>
+                </Card>
+                <hr
+                    style={{
+                        color: 'red',
+                        backgroundColor: 'color',
+                        height: 5
+                    }}
+                />
+                <ReactJson src={response} theme="apathy:inverted" />
+                <div className="row" align="center">
+                    <button type="button" className="btn btn-primary" onClick={this.download}>
+                        Download Results JSON file
+                    </button>
+                </div>
+            </React.Fragment>
+        );
+    }
+
+    render() {
+        // if (this.props.isComplete)
+        if (false)
+            return (
+                <div>
+                    {this.renderComplete()}
+                </div>
+            );
+        else {
+            return (
+                <div>
+                    {this.renderForm()}
+                </div>
+            )
+        }
+    }
+
 }
 
-App.propTypes = {
+TopicAnalysisService.propTypes = {
     classes: PropTypes.object.isRequired,
+    theme: PropTypes.object.isRequired,
 };
 
-export default withStyles(styles)(App);
+export default withTheme()(withStyles(styles)(TopicAnalysisService));
