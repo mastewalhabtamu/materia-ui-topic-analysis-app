@@ -44,10 +44,10 @@ const DefaultInputs = {
         "In a nation governed by rule of law, citizenship has a clearly defined meaning with rights and responsibilities relatively straightforwardly derivable from written legal documents using modern analytical logic (admittedly with some measure of quasi-subjective interpretation via case law).",
         "Saudi Arabian citizenship also has a real meaning, but it's a different sort of meaning\u200a—\u200aderivable from various historical Islamic writings (the Quran, the hadiths, etc.) based on deep contextual interpretation by modern and historical Islamic figures. This is a species of legal interpretation that is understood rather poorly by myself personally, and one that is less easily comprehensible by current AIs.",
         "I'm aware that affiliation with Saudi Arabia in any sense has become controversial in recent weeks due to the apparent murder of Jamal Khashoggi."],
-    "num_topics": 2,
-    "topic_divider": 0,
-    "maxiter": 22,
-    "beta": 1
+    "num_topics": '2',
+    "topic_divider": '0',
+    "maxiter": '22',
+    "beta": '1'
 };
 
 const styles = theme => ({
@@ -113,7 +113,6 @@ const theme = createMuiTheme({
 class TopicAnalysisService extends React.Component {
     constructor(props) {
         super(props);
-        this.download = this.download.bind(this);
 
         this.handleFormUpdate = this.handleFormUpdate.bind(this);
 
@@ -133,13 +132,15 @@ class TopicAnalysisService extends React.Component {
 
         this.validateText = this.validateText.bind(this);
         this.validateAllValues = this.validateAllValues.bind(this);
-        this.createJSONRequest = this.createJSONRequest.bind(this);
+        this.createRequestInputs = this.createRequestInputs.bind(this);
 
         this.state = this.getInitialState();
+        this.resetInternalState = this.resetInternalState.bind(this);
 
         this.handleUploadedTexts = this.handleUploadedTexts.bind(this);
         this.submitAction = this.submitAction.bind(this);
-        this.resetInternalState = this.resetInternalState.bind(this);
+
+        this.download = this.download.bind(this);
     }
 
     getInitialState() {
@@ -147,27 +148,18 @@ class TopicAnalysisService extends React.Component {
             serviceName: "TopicAnalysis",
             methodName: "Select a method",
 
-            texts: [],
+            file_texts: [],
 
             // form inputs
             [InputType.Text]: '',
-            [Parameters.NumOfTopics]: 4,
-            [Parameters.TopicDivider]: 0,
-            [Parameters.MaxIter]: 22,
-            [Parameters.Beta]: 1,
+            [Parameters.NumOfTopics]: '4',
+            [Parameters.TopicDivider]: '0',
+            [Parameters.MaxIter]: '22',
+            [Parameters.Beta]: '1',
 
             errors: {},
 
-            datasetFile: null,
-            dataset: null,
-            enteredJSON: null,
-
-            isValid: {
-                datasetFile: false,
-                validJSON: false,
-            },
             fileAccept: "text/plain",
-            internal_error: "",
             inputType: InputType.Text,
         }
     };
@@ -191,13 +183,13 @@ class TopicAnalysisService extends React.Component {
         });
     }
 
-    renderMuiFormInput() {
+    renderMuiFormInputTypes() {
         return Object.values(InputType).map((inputType, index) => {
             return <MenuItem value={inputType} key={index}>{inputType}</MenuItem>;
         });
     }
 
-    renderDataInput(classes) {
+    renderTextDataInput(classes) {
         if (this.state.inputType === InputType.Text) {
             return <TextField className={classes.formControl}
                 id={InputType.Text}
@@ -216,10 +208,16 @@ class TopicAnalysisService extends React.Component {
         } else if (this.state.inputType === InputType.File) {
             return (<div className={classes.formControl}>
                 <TextUploader
-                    handleUploadeTexts={this.handleUploadedTexts}
+                    handleUploadedTexts={this.handleUploadedTexts}
                     validateText={this.validateText}
                     fileAccept={this.state.fileAccept}
+                    parentRejection={this.state.errors[InputType.File]}
                 />
+                {this.state.errors[InputType.File]
+                    && <FormHelperText error className={classes.centerText}>
+                        {this.state.errors[InputType.File]}
+                    </FormHelperText>
+                }
             </div>)
                 ;
         } else {
@@ -233,9 +231,7 @@ class TopicAnalysisService extends React.Component {
         const event_target_name = event.target.name;
         const event_target_value = event.target.value;
         console.log('target_value', event.target.value);
-        this.setState({
-            [event_target_name]: event_target_value
-        }, () => {
+        this.setState({ [event_target_name]: event_target_value }, () => {
             // run validation and other codes after ensuring state is updated
             if (event_target_name in this.validators) {
                 console.log('validation performed');
@@ -245,67 +241,36 @@ class TopicAnalysisService extends React.Component {
             }
 
             if (event_target_name === 'methodName' && this.state.inputType === InputType.Text) {
-                this.setState({ [InputType.Text]: DefaultInputs.docs });
-                this.setErrorState({ [InputType.Text]: null }); // discard error if there was one
+                this.setState({ [InputType.Text]: DefaultInputs.docs[0] });
+                this.setErrorState({ [InputType.Text]: null, "methodName": null }); // discard error if there was one
             }
         });
     }
 
-    handleUploadedTexts(texts){
-        console.log('handleUploadedTexts');
+    handleUploadedTexts(texts) {
+        this.setState({ file_texts: texts });
+        this.setErrorState({ [InputType.File]: null });
+        console.log('handleUploadedTexts: ', texts);
     }
 
-    handleFilesUpload(files) {
-        let found_errors = [];
-        let found_texts = [];
-        for (let file of files) {
-            if (!file || !file.type.match(this.state.fileAccept)) {
-                // this.setErrorState({
-                //     [InputType.File]: `File '${file.name}' is incorrect type. Supported file type is ${this.state.fileAccept}`
-                // });
-                // this.setState({ datasetFile: null });
-            } else {
-                const fileReader = new FileReader();
-                fileReader.onload = (e) => {
-                    let textContent = e.target.result;
-                    let state_error = this.validateText(InputType.File, textContent, e.target.name);
-                    if (state_error[InputType.File]) {
-                        // this.setErrorState({[InputType.File]: })
-                        found_errors.push(state_error[InputType.File]);
-                        this.setErrorState(state_error);
-                        this.setState({ datasetFile: null });
-                    } else {
-                        found_texts.push({[e.target.fileName]: e.target.result});
-                        this.setState({ datasetFile: file, text: textContent });
-                        this.setErrorState({ [InputType.File]: null });
-                    }
-                };
-
-                fileReader.readAsText(file);
-            }
-        }
-    }
-
-    createJSONRequest() {
+    createRequestInputs() {
         let areAllValidInputs = this.validateAllValues();
 
-
         if (areAllValidInputs) {
-            let json_values = {};
+            let request_inputs = {};
 
-            for (let parameter of Object.values(Parameters)) {
-                json_values[parameter] = parseInt(this.state[parameter]);
-            }
+            request_inputs.num_topics = this.state[Parameters.NumOfTopics];
+            request_inputs.topic_divider = this.state[Parameters.NumOfTopics];
+            request_inputs.maxiter = this.state[Parameters.NumOfTopics];
+            request_inputs.beta = this.state[Parameters.NumOfTopics];
 
             if (this.state.inputType === InputType.Text) {
-                json_values.texts = [this.state[InputType.Text]];
+                request_inputs.docs = [this.state[InputType.Text]];
             } else {
-                json_values.texts = this.state.texts
+                request_inputs.docs = this.state.file_texts.map(text => text.content);
             }
 
-            json_values.methodName = this.state.methodName;
-
-            return JSON.stringify(json_values);
+            return request_inputs;
         }
 
         return null;
@@ -313,20 +278,30 @@ class TopicAnalysisService extends React.Component {
 
     validateAllValues() {
         // utilize all validators function since we have to validate everything
-        let found_errors = { [InputType.File]: [] };
+        let found_errors = {};
+        
+        if (this.state.methodName === "Select a method") {
+            Object.assign(found_errors, { "methodName": "No method selected." });
+        }
+
         for (let parameter of Object.values(Parameters)) {
             let state_error = this.validators[parameter]();
             Object.assign(found_errors, state_error);
         }
 
+        let file_texts_errors = [];
         if (this.state.inputType === InputType.Text) {
             let state_error = this.validators[InputType.Text]();
             Object.assign(found_errors, state_error);
         } else if (this.state.inputType === InputType.File) {
-            for (let text of this.state.texts) {
-                let state_error = this.validateText(InputType.File, text.content, text.fileName);
-                if (state_error[InputType.File]){
-                found_errors[InputType.File].push(state_error[InputType.file]);
+            if (this.state.file_texts.length === 0) {
+                let state_error = { [InputType.File]: "No file selected" }
+                Object.assign(found_errors, state_error);
+            } else {
+                for (let text of this.state.file_texts) {
+                    if (text.error) {
+                        file_texts_errors.push(text.error);
+                    }
                 }
             }
         }
@@ -334,17 +309,17 @@ class TopicAnalysisService extends React.Component {
         this.setErrorState(found_errors);
 
         // check if there is an error property or errors object is empty
-        return Object.keys(found_errors).length === 0;
+        return Object.keys(found_errors).length === 0 && file_texts_errors.length === 0;
     }
 
-    validateTextInput(text_arg) {
+    validateTextInput() {
         return this.validateText(InputType.Text, this.state[InputType.Text]);
     }
 
     validateText(inputType, textValue, fileName) {
         if (textValue.trim().length === 0) {
             if (fileName) {
-                return { [inputType]: `File '${fileName}' is empty. Text should not be empty`}
+                return { [inputType]: `File '${fileName}' is empty. Text should not be empty.` }
             } else {
                 return { [inputType]: "Text can not be empty" };
             }
@@ -353,25 +328,52 @@ class TopicAnalysisService extends React.Component {
         }
     }
 
-    validateNumOfTopics() {
-        let value = parseInt(this.state[Parameters.NumOfTopics]);
+    validateNumber(number_string, field_name, only_integer) {
+        let validation = { number: null, error: null };
+        if (number_string.trim().length === 0) {
+            validation.error = `${field_name} must be specified as a number.`;
+            return validation;
+        }
 
-        if (isNaN(value)) {
-            return { [Parameters.NumOfTopics]: "Number of topics can not be Empty." };
-        } else if (value < 1) {
+        let float_value = parseFloat(number_string);
+        if (isNaN(float_value)) {
+            validation.error = `${field_name} must be a number.`;
+            return validation;
+        }
+
+        if (only_integer) {
+            if (/\./.test(number_string)) {
+                console.log('dot found in validation');
+                validation.error = `${field_name} must be an integer.`;
+                return validation;
+            } else {
+                validation.number = parseInt(float_value);
+                return validation;
+            }
+        } else {
+            validation.number = float_value;
+            return validation;
+        }
+    }
+
+    validateNumOfTopics() {
+        let validation = this.validateNumber(this.state[Parameters.NumOfTopics], "Number of topics", true);
+
+        if (validation.error) {
+            return { [Parameters.NumOfTopics]: validation.error };
+        } else if (validation.number < 1) {
             return { [Parameters.NumOfTopics]: "Number of topics isn't big enough for analysis." };
         } else {
             return { [Parameters.NumOfTopics]: null };
         }
-
     }
 
     validateTopicDivider() {
-        let value = parseInt(this.state[Parameters.TopicDivider]);
+        let validation = this.validateNumber(this.state[Parameters.TopicDivider], "Topic divider", true);
 
-        if (isNaN(value)) {
-            return { [Parameters.TopicDivider]: "Topic divider can not be Empty." };
-        } else if (value < 0) {
+        if (validation.error) {
+            return { [Parameters.TopicDivider]: validation.error };
+        } else if (validation.number < 0) {
             return { [Parameters.TopicDivider]: "Topic divider is less than zero." };
         } else {
             return { [Parameters.TopicDivider]: null };
@@ -379,11 +381,11 @@ class TopicAnalysisService extends React.Component {
     }
 
     validateMaxIter() {
-        let value = parseInt(this.state[Parameters.MaxIter]);
+        let validation = this.validateNumber(this.state[Parameters.MaxIter], "Max Iteration", true);
 
-        if (isNaN(value)) {
-            return { [Parameters.MaxIter]: "Max iteration value can not be Empty." };
-        } else if (value <= 0 || value > 500) {
+        if (validation.error) {
+            return { [Parameters.MaxIter]: validation.error };
+        } else if (validation.number <= 0 || validation.number > 500) {
             return {
                 [Parameters.MaxIter]:
                     "Max iteration value (maxiter) should have a value greater than 0 and less than 501."
@@ -394,11 +396,11 @@ class TopicAnalysisService extends React.Component {
     }
 
     validateBeta() {
-        let value = parseInt(this.state[Parameters.Beta]);
+        let validation = this.validateNumber(this.state[Parameters.Beta], "Beta");
 
-        if (isNaN(value)) {
-            return { [Parameters.Beta]: "Max iteration value can not be Empty." };
-        } else if (value <= 0 || value > 1) {
+        if (validation.error) {
+            return { [Parameters.Beta]: validation.error };
+        } else if (validation.number <= 0 || validation.number > 1) {
             return {
                 [Parameters.Beta]: "Beta should have a value greater than 0 and less than or equal to 1."
             };
@@ -408,18 +410,12 @@ class TopicAnalysisService extends React.Component {
     }
 
     submitAction() {
-        this.props.callApiCallback(this.state.serviceName,
-            this.state.methodName, {
-                docs: this.state.dataset['docs'],
-                num_topics: this.state.dataset['num_topics'],
-                topic_divider: this.state.dataset['topic_divider'],
-                maxiter: this.state.dataset['maxiter'] === undefined ? '2' : this.state.dataset['maxiter'],
-                beta: this.state.dataset['beta'] === undefined ? "1" : this.state.dataset['beta']
-            });
-    }
+        let request_inputs = this.createRequestInputs();
 
-    canBeInvoked() {
-        return (this.state.methodName !== "Select a method") && this.state.isValid['validJSON'];
+        if (request_inputs) {
+            this.props.callApiCallback(this.state.serviceName,
+                this.state.methodName, request_inputs);
+        }
     }
 
     download() {
@@ -447,7 +443,7 @@ class TopicAnalysisService extends React.Component {
                     <form>
                         <Grid container className={classes.container}>
                             <Grid item sm className={classes.item}>
-                                <FormControl className={classes.formControl}>
+                                <FormControl className={classes.formControl} error={Boolean(this.state.errors['methodName'])}>
                                     <InputLabel htmlFor="methodName">Method Name</InputLabel>
                                     <Select
                                         value={this.state.methodName}
@@ -459,6 +455,8 @@ class TopicAnalysisService extends React.Component {
                                     >
                                         {this.renderMuiServiceMethodNames(serviceMethodNames)}
                                     </Select>
+                                    {this.state.errors['methodName']
+                                        && <FormHelperText error>{this.state.errors['methodName']}</FormHelperText>}
                                 </FormControl>
                             </Grid>
                             <Grid item sm className={classes.item}>
@@ -472,7 +470,7 @@ class TopicAnalysisService extends React.Component {
                                             id: 'inputType',
                                         }}
                                     >
-                                        {this.renderMuiFormInput()}
+                                        {this.renderMuiFormInputTypes()}
                                     </Select>
                                 </FormControl>
                             </Grid>
@@ -480,7 +478,7 @@ class TopicAnalysisService extends React.Component {
                         <Divider variant="middle" className={classes.divider} />
                         <Grid container className={classes.container}>
                             <Grid item sm={12} className={classes.item}>
-                                {this.renderDataInput(classes)}
+                                {this.renderTextDataInput(classes)}
                             </Grid>
                         </Grid>
 

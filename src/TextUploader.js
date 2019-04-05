@@ -6,7 +6,7 @@ import Dropzone from "react-dropzone";
 import classNames from "classnames";
 import { withStyles } from "@material-ui/core/styles";
 
-import { Typography, List, ListItem, ListItemIcon, ListItemText } from "@material-ui/core";
+import { Typography, List, ListItem, ListItemIcon, ListItemText, CircularProgress } from "@material-ui/core";
 import { CloudUpload, Check, Error } from "@material-ui/icons";
 
 const styles = theme => ({
@@ -32,6 +32,14 @@ const styles = theme => ({
     successColor: {
         color: "#54C21F",
     },
+    dropzone: {
+        textAlign: "center",
+        padding: "30px",
+        border: "dashed 1px #90D4FF"
+    },
+    dropzoneError: {
+        border: "dashed 1px #f44336",
+    }
 });
 
 class TextUploader extends React.Component {
@@ -39,6 +47,7 @@ class TextUploader extends React.Component {
         super(props);
         this.state = {
             texts: [],
+            loading: false,
         };
 
         this.selectedFiles = null;
@@ -53,7 +62,7 @@ class TextUploader extends React.Component {
         this.selectedFiles = files.length;
 
         for (let file of files) {
-            if (!file || !file.type.match(this.props.fileAccept)) {
+            if (!file.type.match(this.props.fileAccept)) {
                 let file_text = {
                     fileName: file.name,
                     content: null,
@@ -70,7 +79,7 @@ class TextUploader extends React.Component {
                     let state_error = this.props.validateText("file_text", textContent, file.name);
                     if (state_error["file_text"]) {
                         file_text = {
-                            fileName: e.target.name,
+                            fileName: file.name,
                             content: null,
                             error: state_error["file_text"],
                         };
@@ -87,9 +96,11 @@ class TextUploader extends React.Component {
                     this.setState((state, props) => ({
                         texts: state.texts.concat([file_text])
                     }), () => {
-                        if (this.selectedFiles && this.selectedFiles === this.state.length) {
+                        if (this.selectedFiles && this.selectedFiles === this.state.texts.length) {
                             // this means all files are read, let's tell our parent then
                             this.props.handleUploadedTexts(this.state.texts);
+                            // and also we have finished loading the files
+                            this.setState({ loading: false });
                         }
                     });
                 }.bind(this);
@@ -119,7 +130,7 @@ class TextUploader extends React.Component {
         });
 
         let textListItems = this.state.texts.map((text, index) => {
-            return <ListItem key={index} className={(text.error)? classes.fileError:classes.fileInfo}>
+            return <ListItem key={index} className={(text.error) ? classes.fileError : classes.fileInfo}>
                 <ListItemIcon>
                     {(text.error)
                         ? <Error className={classes.errorColor} />
@@ -144,6 +155,8 @@ class TextUploader extends React.Component {
     };
 
     render() {
+        const { classes } = this.props;
+        console.log("fileError: ", this.props.fileError);
 
         return (
             <React.Fragment>
@@ -152,7 +165,8 @@ class TextUploader extends React.Component {
                     multiple={true}
                     onDrop={
                         files => {
-                            this.setState({ texts: [] }, () => {
+                            // reset texts to empty and start processing uploaded files
+                            this.setState({ texts: [], loading: true }, () => {
                                 this.processUploadedFiles(files);
                             });
                             return false;
@@ -167,30 +181,25 @@ class TextUploader extends React.Component {
                         return (
                             <div
                                 {...getRootProps()}
-                                className={classNames("dropzone", {
-                                    "dropzone--isActive": isDragActive
+                                className={classNames(classes.dropzone, {
+                                    [classes.dropzoneError]: this.props.parentRejection
                                 })}
-                                style={{
-                                    textAlign: "center",
-                                    padding: "30px",
-                                    border: "dashed 1px #90D4FF"
-                                }}
                             >
                                 <input {...getInputProps()} />
-                                {this.props.uploadedFile ? (
-                                    <Check style={{ fontSize: "48px", color: "#54C21F" }} />
-                                ) : (
-                                        <CloudUpload style={{ fontSize: "48px" }} />
-                                    )}
-                                {isDragActive ? (
-                                    <Typography variant="body2">Drop dataset here...</Typography>
-                                ) : (
-                                        <Typography variant="body2">
+                                {
+                                    (this.loading)
+                                        ? <CircularProgress className={classes.progress} />
+                                        : <CloudUpload style={{ fontSize: "48px" }}/>
+                                }
+                                {
+                                    (isDragActive)
+                                        ? <Typography variant="body2">Drop dataset here...</Typography>
+                                        : <Typography variant="body2">
                                             Click here to select a dataset file, or drag and drop it
-                                        over this text. We expect {this.props.fileAccept} to be uploaded. Other files
-                                                                                are disabled.
-                                    </Typography>
-                                    )}
+                                            over this text. We expect {this.props.fileAccept} to be uploaded.
+                                            Other files are disabled.
+                                          </Typography>
+                                }
                             </div>
                         );
                     }}
