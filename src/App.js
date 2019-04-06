@@ -27,6 +27,7 @@ import { CheckCircle, Cancel } from "@material-ui/icons";
 import ResetIcon from '@material-ui/icons/Autorenew';
 import ValidateIcon from '@material-ui/icons/LineStyle';
 import CallIcon from '@material-ui/icons/SettingsRemote';
+
 import TextUploader from "./TextUploader";
 
 const InputType = { File: 'File Upload', Text: 'Textual Input' };
@@ -143,6 +144,9 @@ class TopicAnalysisService extends React.Component {
         this.download = this.download.bind(this);
     }
 
+    /**************************************
+     * State related operations
+     **************************************/
     getInitialState() {
         return {
             serviceName: "TopicAnalysis",
@@ -176,142 +180,9 @@ class TopicAnalysisService extends React.Component {
         this.setState(this.getInitialState());
     }
 
-    renderMuiServiceMethodNames(serviceMethodNames) {
-        const serviceNameOptions = ["Select a method", ...serviceMethodNames];
-        return serviceNameOptions.map((serviceMethodName, index) => {
-            return <MenuItem value={serviceMethodName} key={index}>{serviceMethodName}</MenuItem>;
-        });
-    }
-
-    renderMuiFormInputTypes() {
-        return Object.values(InputType).map((inputType, index) => {
-            return <MenuItem value={inputType} key={index}>{inputType}</MenuItem>;
-        });
-    }
-
-    renderTextDataInput(classes) {
-        if (this.state.inputType === InputType.Text) {
-            return <TextField className={classes.formControl}
-                id={InputType.Text}
-                name={InputType.Text}
-                label="Text Input"
-                multiline
-                fullWidth
-                rows="6"
-                value={this.state[InputType.Text]}
-                margin="normal"
-                variant="outlined"
-                onChange={this.handleFormUpdate}
-                error={Boolean(this.state.errors[InputType.Text])}
-                helperText={this.state.errors[InputType.Text]}
-            />;
-        } else if (this.state.inputType === InputType.File) {
-            return (<div className={classes.formControl}>
-                <TextUploader
-                    handleUploadedTexts={this.handleUploadedTexts}
-                    validateText={this.validateText}
-                    fileAccept={this.state.fileAccept}
-                    parentRejection={this.state.errors[InputType.File]}
-                />
-                {this.state.errors[InputType.File]
-                    && <FormHelperText error className={classes.centerText}>
-                        {this.state.errors[InputType.File]}
-                    </FormHelperText>
-                }
-            </div>)
-                ;
-        } else {
-            return <Typography variant='body1' className={classNames(classes.formControl, classes.centerText)}>
-                Select an appropriate input type
-            </Typography>
-        }
-    }
-
-    handleFormUpdate(event) {
-        const event_target_name = event.target.name;
-        const event_target_value = event.target.value;
-        console.log('target_value', event.target.value);
-        this.setState({ [event_target_name]: event_target_value }, () => {
-            // run validation and other codes after ensuring state is updated
-            if (event_target_name in this.validators) {
-                console.log('validation performed');
-                // validate form input change
-                let state_error = this.validators[event_target_name]();
-                this.setErrorState(state_error);
-            }
-
-            if (event_target_name === 'methodName' && this.state.inputType === InputType.Text) {
-                this.setState({ [InputType.Text]: DefaultInputs.docs[0] });
-                this.setErrorState({ [InputType.Text]: null, "methodName": null }); // discard error if there was one
-            }
-        });
-    }
-
-    handleUploadedTexts(texts) {
-        this.setState({ file_texts: texts });
-        this.setErrorState({ [InputType.File]: null });
-        console.log('handleUploadedTexts: ', texts);
-    }
-
-    createRequestInputs() {
-        let areAllValidInputs = this.validateAllValues();
-
-        if (areAllValidInputs) {
-            let request_inputs = {};
-
-            request_inputs.num_topics = this.state[Parameters.NumOfTopics];
-            request_inputs.topic_divider = this.state[Parameters.NumOfTopics];
-            request_inputs.maxiter = this.state[Parameters.NumOfTopics];
-            request_inputs.beta = this.state[Parameters.NumOfTopics];
-
-            if (this.state.inputType === InputType.Text) {
-                request_inputs.docs = [this.state[InputType.Text]];
-            } else {
-                request_inputs.docs = this.state.file_texts.map(text => text.content);
-            }
-
-            return request_inputs;
-        }
-
-        return null;
-    }
-
-    validateAllValues() {
-        // utilize all validators function since we have to validate everything
-        let found_errors = {};
-        
-        if (this.state.methodName === "Select a method") {
-            Object.assign(found_errors, { "methodName": "No method selected." });
-        }
-
-        for (let parameter of Object.values(Parameters)) {
-            let state_error = this.validators[parameter]();
-            Object.assign(found_errors, state_error);
-        }
-
-        let file_texts_errors = [];
-        if (this.state.inputType === InputType.Text) {
-            let state_error = this.validators[InputType.Text]();
-            Object.assign(found_errors, state_error);
-        } else if (this.state.inputType === InputType.File) {
-            if (this.state.file_texts.length === 0) {
-                let state_error = { [InputType.File]: "No file selected" }
-                Object.assign(found_errors, state_error);
-            } else {
-                for (let text of this.state.file_texts) {
-                    if (text.error) {
-                        file_texts_errors.push(text.error);
-                    }
-                }
-            }
-        }
-
-        this.setErrorState(found_errors);
-
-        // check if there is an error property or errors object is empty
-        return Object.keys(found_errors).length === 0 && file_texts_errors.length === 0;
-    }
-
+    /****************************************
+     * Form validation operations
+     ****************************************/
     validateTextInput() {
         return this.validateText(InputType.Text, this.state[InputType.Text]);
     }
@@ -409,6 +280,97 @@ class TopicAnalysisService extends React.Component {
         }
     }
 
+    validateAllValues() {
+        // utilize all validators function since we have to validate everything
+        let found_errors = {};
+        
+        if (this.state.methodName === "Select a method") {
+            Object.assign(found_errors, { "methodName": "No method selected." });
+        }
+
+        for (let parameter of Object.values(Parameters)) {
+            let state_error = this.validators[parameter]();
+            Object.assign(found_errors, state_error);
+        }
+
+        let file_texts_errors = [];
+        if (this.state.inputType === InputType.Text) {
+            let state_error = this.validators[InputType.Text]();
+            Object.assign(found_errors, state_error);
+        } else if (this.state.inputType === InputType.File) {
+            if (this.state.file_texts.length === 0) {
+                let state_error = { [InputType.File]: "No file selected" }
+                Object.assign(found_errors, state_error);
+            } else {
+                for (let text of this.state.file_texts) {
+                    if (text.error) {
+                        file_texts_errors.push(text.error);
+                    }
+                }
+            }
+        }
+
+        this.setErrorState(found_errors);
+
+        // check if there is an error property or errors object is empty
+        return Object.keys(found_errors).length === 0 && file_texts_errors.length === 0;
+    }
+
+    /****************************************
+     * Form inputs change handling operations
+     ****************************************/
+    handleFormUpdate(event) {
+        const event_target_name = event.target.name;
+        const event_target_value = event.target.value;
+        console.log('target_value', event.target.value);
+        this.setState({ [event_target_name]: event_target_value }, () => {
+            // run validation and other codes after ensuring state is updated
+            if (event_target_name in this.validators) {
+                console.log('validation performed');
+                // validate form input change
+                let state_error = this.validators[event_target_name]();
+                this.setErrorState(state_error);
+            }
+
+            if (event_target_name === 'methodName' && this.state.inputType === InputType.Text) {
+                this.setState({ [InputType.Text]: DefaultInputs.docs[0] });
+                this.setErrorState({ [InputType.Text]: null, "methodName": null }); // discard error if there was one
+            }
+        });
+    }
+
+    handleUploadedTexts(texts) {
+        this.setState({ file_texts: texts });
+        this.setErrorState({ [InputType.File]: null });
+        console.log('handleUploadedTexts: ', texts);
+    }
+
+    /****************************************
+     * Form submitting operations
+     ****************************************/
+    createRequestInputs() {
+        let areAllValidInputs = this.validateAllValues();
+
+        if (areAllValidInputs) {
+            let request_inputs = {};
+
+            request_inputs.num_topics = this.state[Parameters.NumOfTopics];
+            request_inputs.topic_divider = this.state[Parameters.NumOfTopics];
+            request_inputs.maxiter = this.state[Parameters.NumOfTopics];
+            request_inputs.beta = this.state[Parameters.NumOfTopics];
+
+            if (this.state.inputType === InputType.Text) {
+                request_inputs.docs = [this.state[InputType.Text]];
+            } else {
+                request_inputs.docs = this.state.file_texts.map(text => text.content);
+            }
+
+            return request_inputs;
+        }
+
+        return null;
+    }
+    
     submitAction() {
         let request_inputs = this.createRequestInputs();
 
@@ -418,6 +380,9 @@ class TopicAnalysisService extends React.Component {
         }
     }
 
+    /****************************************
+     * Result downloading operations
+     ****************************************/
     download() {
         const link = document.createElement('a');
         link.setAttribute("type", "hidden");
@@ -429,6 +394,60 @@ class TopicAnalysisService extends React.Component {
         link.click();
 
         link.remove();
+    }
+
+    /****************************************
+     * UI rendering operations
+     ****************************************/
+    renderMuiServiceMethodNames(serviceMethodNames) {
+        const serviceNameOptions = ["Select a method", ...serviceMethodNames];
+        return serviceNameOptions.map((serviceMethodName, index) => {
+            return <MenuItem value={serviceMethodName} key={index}>{serviceMethodName}</MenuItem>;
+        });
+    }
+
+    renderMuiFormInputTypes() {
+        return Object.values(InputType).map((inputType, index) => {
+            return <MenuItem value={inputType} key={index}>{inputType}</MenuItem>;
+        });
+    }
+
+    renderTextDataInput(classes) {
+        if (this.state.inputType === InputType.Text) {
+            return <TextField className={classes.formControl}
+                id={InputType.Text}
+                name={InputType.Text}
+                label="Text Input"
+                multiline
+                fullWidth
+                rows="6"
+                value={this.state[InputType.Text]}
+                margin="normal"
+                variant="outlined"
+                onChange={this.handleFormUpdate}
+                error={Boolean(this.state.errors[InputType.Text])}
+                helperText={this.state.errors[InputType.Text]}
+            />;
+        } else if (this.state.inputType === InputType.File) {
+            return (<div className={classes.formControl}>
+                <TextUploader
+                    handleUploadedTexts={this.handleUploadedTexts}
+                    validateText={this.validateText}
+                    fileAccept={this.state.fileAccept}
+                    parentRejection={this.state.errors[InputType.File]}
+                />
+                {this.state.errors[InputType.File]
+                    && <FormHelperText error className={classes.centerText}>
+                        {this.state.errors[InputType.File]}
+                    </FormHelperText>
+                }
+            </div>)
+                ;
+        } else {
+            return <Typography variant='body1' className={classNames(classes.formControl, classes.centerText)}>
+                Select an appropriate input type
+            </Typography>
+        }
     }
 
     renderForm() {
@@ -541,7 +560,7 @@ class TopicAnalysisService extends React.Component {
                                     error={Boolean(this.state.errors[Parameters.Beta])}
                                     helperText={(Boolean(this.state.errors[Parameters.Beta]))
                                         ? this.state.errors[Parameters.Beta]
-                                        : "beta value of the topic function"}
+                                        : "Beta value of the topic function"}
                                 />
                             </Grid>
                         </Grid>
