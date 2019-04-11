@@ -30,25 +30,19 @@ import CallIcon from '@material-ui/icons/SettingsRemote';
 import TextUploader from "./analysis-helpers/TextUploader";
 
 const InputType = { File: 'File Upload', Text: 'Textual Input' };
-const Parameters = {
-    NumOfTopics: 'Number of Topics', TopicDivider: 'Topic Divider', MaxIter: 'Max Iteration', Beta: 'Beta'
+const Modes = {
+    CentralNodes: 'Central Nodes',
+    PeripherialNodes: 'Peripherial nodes',
+    DegreeCentrality: 'Degree Centrality',
+    ClosenessCentrality: 'Closeness Centrality',
+    BetweennessCentrality: 'Betweenness Centrality',
+    EigenCentrality: 'Eigen Vector Centrality',
+    PageRank: 'Page Rank',
+    Hits: 'Hits',
 };
+
 const DefaultInputs = {
-    "docs": [
-        "Toward Democratic, Lawful Citizenship for AIs, Robots, and Corporations",
-        "Dr. Ben Goertzel, CEO of SingularityNET, shares his thoughts about the AI Citizenship Test",
-        "I am writing this on a plane flying away from Malta, where I just spoke about SingularityNET at the Malta Blockchain Summit.",
-        "It was my first time on Malta, and after the event, I took the afternoon to explore some of the elegant, quaint, ancient neighborhoods of the island.",
-        "Walking through medieval alleyways by the rocky coast, I felt an ironic contrast between my elegant surroundings and the main reason I had decided to allocate a couple days from my insanely busy schedule to this Malta event: not just the conference itself, but also the opportunity to meet with the top levels of the Malta government to discuss the enablement of Maltese citizenship for AIs, robots and automated corporations.",
-        "The folks who had built the stone walls lining the narrow Maltese roads, still standing strong centuries later, had probably not foreseen their blue-wave-lapped island becoming a nexus of thinking at the intersection of general intelligence theory, cryptography, distributed systems, and advanced legal theory.",
-        "The Hanson Robot Sophia, with whose development I've been intimately involved via my role as Chief Scientist of Hanson Robotics, was granted citizenship of Saudi Arabia this year. This was an exciting landmark event, however, its significance is muddled a bit by the fact that Saudi Arabia is not governed by rule of law in the modern sense.",
-        "In a nation governed by rule of law, citizenship has a clearly defined meaning with rights and responsibilities relatively straightforwardly derivable from written legal documents using modern analytical logic (admittedly with some measure of quasi-subjective interpretation via case law).",
-        "Saudi Arabian citizenship also has a real meaning, but it's a different sort of meaning\u200a—\u200aderivable from various historical Islamic writings (the Quran, the hadiths, etc.) based on deep contextual interpretation by modern and historical Islamic figures. This is a species of legal interpretation that is understood rather poorly by myself personally, and one that is less easily comprehensible by current AIs.",
-        "I'm aware that affiliation with Saudi Arabia in any sense has become controversial in recent weeks due to the apparent murder of Jamal Khashoggi."],
-    "num_topics": '2',
-    "topic_divider": '0',
-    "maxiter": '22',
-    "beta": '1'
+
 };
 
 const styles = theme => ({
@@ -110,7 +104,7 @@ const theme = createMuiTheme({
     },
 });
 
-class TopicAnalysisService extends React.Component {
+class NodeImportance extends React.Component {
     constructor(props) {
         super(props);
 
@@ -118,16 +112,9 @@ class TopicAnalysisService extends React.Component {
 
         // setup validators for each form input
         this.validateTextInput = this.validateTextInput.bind(this);
-        this.validateNumOfTopics = this.validateNumOfTopics.bind(this);
-        this.validateTopicDivider = this.validateTopicDivider.bind(this);
-        this.validateMaxIter = this.validateMaxIter.bind(this);
-        this.validateBeta = this.validateBeta.bind(this);
+
         this.validators = {
             [InputType.Text]: this.validateTextInput,
-            [Parameters.NumOfTopics]: this.validateNumOfTopics,
-            [Parameters.TopicDivider]: this.validateTopicDivider,
-            [Parameters.MaxIter]: this.validateMaxIter,
-            [Parameters.Beta]: this.validateBeta,
         };
 
         this.validateText = this.validateText.bind(this);
@@ -148,17 +135,15 @@ class TopicAnalysisService extends React.Component {
      **************************************/
     getInitialState() {
         return {
-            serviceName: "TopicAnalysis",
+            serviceName: "NodeImportance",
             methodName: "Select a method",
 
             file_texts: [],
 
             // form inputs
             [InputType.Text]: '',
-            [Parameters.NumOfTopics]: '4',
-            [Parameters.TopicDivider]: '0',
-            [Parameters.MaxIter]: '22',
-            [Parameters.Beta]: '1',
+
+            mode: Modes.CentralNodes,
 
             errors: {},
 
@@ -186,6 +171,14 @@ class TopicAnalysisService extends React.Component {
         return this.validateText(InputType.Text, this.state[InputType.Text]);
     }
 
+    isObject(value) {
+        return value && typeof value === 'object' && value.constructor === Object;
+    }
+
+    isArray(value) {
+        return value && typeof value === 'object' && value.constructor === Array;
+    }
+
     validateText(inputType, textValue, fileName) {
         if (textValue.trim().length === 0) {
             if (fileName) {
@@ -194,24 +187,9 @@ class TopicAnalysisService extends React.Component {
                 return { [inputType]: "Text can not be empty" };
             }
         } else {
+            let json = null;
             try {
-                let json = JSON.parse(textValue);
-                if (!(json instanceof Array) || !(json.every(item => typeof item === 'string'))) {
-                    if (fileName) {
-                        return { [inputType]: `File '${fileName}' content is not an array of strings in JSON format.` };
-                    } else {
-                        return { [inputType]: `Text must be an array of strings in JSON format.` };
-                    }
-                } else if (json.length < 2) {
-                    if (fileName) {
-                        return {
-                            [inputType]:
-                                `The number of strings in the array of  File '${fileName}' content must be greater than 1.`
-                        };
-                    } else {
-                        return { [inputType]: `The number of strings in the array must be greater than 1.` };
-                    }
-                }
+                json = JSON.parse(textValue);
             } catch (err) {
                 if (err instanceof SyntaxError) {
                     if (fileName) {
@@ -225,88 +203,34 @@ class TopicAnalysisService extends React.Component {
                 return { [inputType]: `Something went wrong when trying to parse text to JSON. Please, try again.` };
             }
 
-            return { [inputType]: null };
-        }
-    }
-
-    validateNumber(number_string, field_name, only_integer) {
-        let validation = { number: null, error: null };
-        if (number_string.trim().length === 0) {
-            validation.error = `${field_name} must be specified as a number.`;
-            return validation;
-        }
-
-        let float_value = parseFloat(number_string);
-        if (isNaN(float_value)) {
-            validation.error = `${field_name} must be a number.`;
-            return validation;
-        }
-
-        if (only_integer) {
-            if (/\./.test(number_string)) {
-                console.log('dot found in validation');
-                validation.error = `${field_name} must be an integer.`;
-                return validation;
-            } else {
-                validation.number = parseInt(float_value);
-                return validation;
+            if (!this.isObject(json)) {
+                if (fileName) {
+                    return { [inputType]: `File '${fileName}' content is not an object in JSON format.` };
+                } else {
+                    return { [inputType]: `Text must be an object in JSON format.` };
+                }
+            } else if (
+                Object.keys(json).length !== 1
+                || !this.isObject(json["graph"])
+                || Object.keys(json["graph"]).length !== 2
+                || !this.isArray(json["graph"]["nodes"])
+                || !this.isArray(json["graph"]["edges"])
+            ) {
+                if (fileName) {
+                    return {
+                        [inputType]:
+                            `The JSON object structure in File '${fileName}' content must be 
+                            \n\t{"graph": {"nodes": [...], "edges": [...]}}.`
+                    };
+                } else {
+                    return {
+                        [inputType]:
+                            `The JSON object structure in the text must be 
+                            \n\t{ "graph" : { "nodes" : [...], "edges" : [...] } }.` };
+                }
             }
-        } else {
-            validation.number = float_value;
-            return validation;
-        }
-    }
 
-    validateNumOfTopics() {
-        let validation = this.validateNumber(this.state[Parameters.NumOfTopics], "Number of topics", true);
-
-        if (validation.error) {
-            return { [Parameters.NumOfTopics]: validation.error };
-        } else if (validation.number < 1) {
-            return { [Parameters.NumOfTopics]: "Number of topics isn't big enough for analysis." };
-        } else {
-            return { [Parameters.NumOfTopics]: null };
-        }
-    }
-
-    validateTopicDivider() {
-        let validation = this.validateNumber(this.state[Parameters.TopicDivider], "Topic divider", true);
-
-        if (validation.error) {
-            return { [Parameters.TopicDivider]: validation.error };
-        } else if (validation.number < 0) {
-            return { [Parameters.TopicDivider]: "Topic divider is less than zero." };
-        } else {
-            return { [Parameters.TopicDivider]: null };
-        }
-    }
-
-    validateMaxIter() {
-        let validation = this.validateNumber(this.state[Parameters.MaxIter], "Max Iteration", true);
-
-        if (validation.error) {
-            return { [Parameters.MaxIter]: validation.error };
-        } else if (validation.number <= 0 || validation.number > 500) {
-            return {
-                [Parameters.MaxIter]:
-                    "Max iteration value (maxiter) should have a value greater than 0 and less than 501."
-            };
-        } else {
-            return { [Parameters.MaxIter]: null };
-        }
-    }
-
-    validateBeta() {
-        let validation = this.validateNumber(this.state[Parameters.Beta], "Beta");
-
-        if (validation.error) {
-            return { [Parameters.Beta]: validation.error };
-        } else if (validation.number <= 0 || validation.number > 1) {
-            return {
-                [Parameters.Beta]: "Beta should have a value greater than 0 and less than or equal to 1."
-            };
-        } else {
-            return { [Parameters.Beta]: null };
+            return { [inputType]: null };
         }
     }
 
@@ -316,13 +240,6 @@ class TopicAnalysisService extends React.Component {
 
         if (this.state.methodName === "Select a method") {
             Object.assign(found_errors, { "methodName": "No method selected." });
-        }
-
-        for (let parameter of Object.values(Parameters)) {
-            let state_error = this.validators[parameter]();
-            if (state_error[parameter]) {
-                Object.assign(found_errors, state_error);
-            }
         }
 
         let file_texts_errors = [];
@@ -376,8 +293,11 @@ class TopicAnalysisService extends React.Component {
                 }
 
                 this.setErrorState(state_error);    // discard errors if there were
-            }
+            } else if (event_target_name === 'mode') {
+                let state_error = { 'mode': null }
 
+                this.setErrorState(state_error);
+            }
         });
     }
 
@@ -396,21 +316,16 @@ class TopicAnalysisService extends React.Component {
         if (areAllValidInputs) {
             let request_inputs = {};
 
-            request_inputs.num_topics = this.state[Parameters.NumOfTopics];
-            request_inputs.topic_divider = this.state[Parameters.TopicDivider];
-            request_inputs.maxiter = this.state[Parameters.MaxIter];
-            request_inputs.beta = this.state[Parameters.Beta];
-
             // since JSON format is validated, no parsing trouble is assumed when processing texts
             if (this.state.inputType === InputType.Text) {
-                request_inputs.docs = JSON.parse(this.state[InputType.Text]);
+                request_inputs.graph = JSON.parse(this.state[InputType.Text]);
             } else {
-                let docs = [];
+                let graphs = [];
                 for (let file_text of this.state.file_texts) {
-                    docs = docs.concat(JSON.parse(file_text.content));
+                    graphs = graphs.concat(JSON.parse(file_text.content));
                 }
 
-                request_inputs.docs = docs;
+                request_inputs.graphs = graphs;
             }
 
             return request_inputs;
@@ -460,6 +375,12 @@ class TopicAnalysisService extends React.Component {
         });
     }
 
+    renderMuiModes() {
+        return Object.values(Modes).map((mode, index) => {
+            return <MenuItem value={mode} key={index}>{mode}</MenuItem>;
+        });
+    }
+
     renderTextDataInput(classes) {
         if (this.state.inputType === InputType.Text) {
             return <TextField className={classes.formControl}
@@ -474,7 +395,7 @@ class TopicAnalysisService extends React.Component {
                 variant="outlined"
                 onChange={this.handleFormUpdate}
                 error={Boolean(this.state.errors[InputType.Text])}
-                helperText={this.state.errors[InputType.Text] || 'Text must be an array of strings in JSON format.'}
+                helperText={this.state.errors[InputType.Text] || 'Text must be a graph object in JSON format.'}
             />;
         } else if (this.state.inputType === InputType.File) {
             return (<div className={classes.formControl}>
@@ -509,7 +430,7 @@ class TopicAnalysisService extends React.Component {
                 <div className={classes.root}>
                     <form>
                         <Grid container className={classes.container}>
-                            <Grid item sm className={classes.item}>
+                            <Grid item sm={6} className={classes.item}>
                                 <FormControl className={classes.formControl} error={Boolean(this.state.errors['methodName'])}>
                                     <InputLabel htmlFor="methodName">Method Name</InputLabel>
                                     <Select
@@ -526,7 +447,13 @@ class TopicAnalysisService extends React.Component {
                                         && <FormHelperText error>{this.state.errors['methodName']}</FormHelperText>}
                                 </FormControl>
                             </Grid>
-                            <Grid item sm className={classes.item}>
+
+                        </Grid>
+
+                        <Divider variant="middle" className={classes.divider} />
+
+                        <Grid container className={classes.container}>
+                            <Grid item sm={6} className={classes.item}>
                                 <FormControl margin='normal' className={classes.formControl}>
                                     <InputLabel htmlFor="inputFormType">Input Type</InputLabel>
                                     <Select
@@ -541,8 +468,25 @@ class TopicAnalysisService extends React.Component {
                                     </Select>
                                 </FormControl>
                             </Grid>
+                            <Grid item sm={6} className={classes.item}>
+                                <FormControl margin='normal' className={classes.formControl}>
+                                    <InputLabel htmlFor="mode">Mode</InputLabel>
+                                    <Select
+                                        value={this.state.mode}
+                                        onChange={this.handleFormUpdate}
+                                        inputProps={{
+                                            name: 'mode',
+                                            id: 'mode',
+                                        }}
+                                    >
+                                        {this.renderMuiModes()}
+                                    </Select>
+                                </FormControl>
+                            </Grid>
                         </Grid>
+
                         <Divider variant="middle" className={classes.divider} />
+
                         <Grid container className={classes.container}>
                             <Grid item sm={12} className={classes.item}>
                                 {this.renderTextDataInput(classes)}
@@ -550,82 +494,20 @@ class TopicAnalysisService extends React.Component {
                         </Grid>
 
                         <Divider variant="middle" className={classes.divider} />
-                        <Grid container className={classes.container}>
-                            <Grid item sm={6} className={classes.item}>
-                                <TextField className={classes.formControl}
-                                    id={Parameters.NumOfTopics}
-                                    name={Parameters.NumOfTopics}
-                                    label="Number of Topics"
-                                    type="number"
-                                    margin="normal"
-                                    value={this.state[Parameters.NumOfTopics]}
-                                    onChange={this.handleFormUpdate}
-                                    error={Boolean(this.state.errors[Parameters.NumOfTopics])}
-                                    helperText={(Boolean(this.state.errors[Parameters.NumOfTopics]))
-                                        ? this.state.errors[Parameters.NumOfTopics]
-                                        : "Number of topics to be extracted"}
-                                />
-                            </Grid>
-                            <Grid item sm={6} className={classes.item}>
-                                <TextField className={classes.formControl}
-                                    id={Parameters.TopicDivider}
-                                    name={Parameters.TopicDivider}
-                                    label="Topic Divider"
-                                    type="number"
-                                    margin="normal"
-                                    value={this.state[Parameters.TopicDivider]}
-                                    onChange={this.handleFormUpdate}
-                                    error={Boolean(this.state.errors[Parameters.TopicDivider])}
-                                    helperText={(Boolean(this.state.errors[Parameters.TopicDivider]))
-                                        ? this.state.errors[Parameters.TopicDivider]
-                                        : "Number of topic dividers"}
-                                />
-                            </Grid>
-                            <Grid item sm={6} className={classes.item}>
-                                <TextField className={classes.formControl}
-                                    id={Parameters.MaxIter}
-                                    name={Parameters.MaxIter}
-                                    label="Max Iteration"
-                                    type="number"
-                                    margin="normal"
-                                    value={this.state[Parameters.MaxIter]}
-                                    onChange={this.handleFormUpdate}
-                                    error={Boolean(this.state.errors[Parameters.MaxIter])}
-                                    helperText={(Boolean(this.state.errors[Parameters.MaxIter]))
-                                        ? this.state.errors[Parameters.MaxIter]
-                                        : "Maximum number of Iteration"}
-                                />
-                            </Grid>
-                            <Grid item sm={6} className={classes.item}>
-                                <TextField className={classes.formControl}
-                                    id={Parameters.Beta}
-                                    name={Parameters.Beta}
-                                    label="Beta"
-                                    type="number"
-                                    margin="normal"
-                                    value={this.state[Parameters.Beta]}
-                                    onChange={this.handleFormUpdate}
-                                    error={Boolean(this.state.errors[Parameters.Beta])}
-                                    helperText={(Boolean(this.state.errors[Parameters.Beta]))
-                                        ? this.state.errors[Parameters.Beta]
-                                        : "Beta value of the topic function"}
-                                />
-                            </Grid>
-                        </Grid>
-                        <Divider variant="middle" className={classes.divider} />
+
                         <Grid container className={classes.container}>
                             <Grid item sm={6} className={classes.item}>
                                 <Button variant="contained" color="primary" className={classes.button}
                                     onClick={this.resetInternalState}>
                                     <ResetIcon className={classes.leftIcon} />
-                                    Reset Form Inputs
+                                    Reset Form
                                 </Button>
                             </Grid>
                             <Grid item sm={6} className={classes.item}>
                                 <Button variant="contained" color="primary" className={classes.button}
                                     onClick={this.submitAction}>
                                     <CallIcon className={classes.leftIcon} />
-                                    Call Topic Analysis
+                                    Call Service
                                 </Button>
                             </Grid>
                         </Grid>
@@ -711,9 +593,9 @@ class TopicAnalysisService extends React.Component {
 
 }
 
-TopicAnalysisService.propTypes = {
+NodeImportance.propTypes = {
     classes: PropTypes.object.isRequired,
     theme: PropTypes.object.isRequired,
 };
 
-export default withTheme()(withStyles(styles)(TopicAnalysisService));
+export default withTheme()(withStyles(styles)(NodeImportance));
