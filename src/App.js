@@ -1,7 +1,4 @@
-import React, { Component } from 'react';
-import logo from './logo.svg';
-import './App.css';
-
+import React from 'react';
 import ReactJson from 'react-json-view';
 import PropTypes from 'prop-types';
 import {
@@ -11,9 +8,11 @@ import {
     Button,
     TextField,
     FormControl,
+    FormControlLabel,
     InputLabel,
     MenuItem,
     Select,
+    Checkbox,
     Divider,
     Icon,
     FormHelperText,
@@ -28,14 +27,15 @@ import ResetIcon from '@material-ui/icons/Autorenew';
 import ValidateIcon from '@material-ui/icons/LineStyle';
 import CallIcon from '@material-ui/icons/SettingsRemote';
 
-import TextUploader from "./TextUploader";
+import TextUploader from "./analysis-helpers/TextUploader";
 
 const InputType = { File: 'File Upload', Text: 'Textual Input' };
 const Parameters = {
     NumOfTopics: 'Number of Topics', TopicDivider: 'Topic Divider', MaxIter: 'Max Iteration', Beta: 'Beta'
 };
 const DefaultInputs = {
-    "docs": ["Toward Democratic, Lawful Citizenship for AIs, Robots, and Corporations",
+    "docs": [
+        "Toward Democratic, Lawful Citizenship for AIs, Robots, and Corporations",
         "Dr. Ben Goertzel, CEO of SingularityNET, shares his thoughts about the AI Citizenship Test",
         "I am writing this on a plane flying away from Malta, where I just spoke about SingularityNET at the Malta Blockchain Summit.",
         "It was my first time on Malta, and after the event, I took the afternoon to explore some of the elegant, quaint, ancient neighborhoods of the island.",
@@ -109,7 +109,6 @@ const theme = createMuiTheme({
         fontSize: 20,
     },
 });
-
 
 class TopicAnalysisService extends React.Component {
     constructor(props) {
@@ -195,6 +194,37 @@ class TopicAnalysisService extends React.Component {
                 return { [inputType]: "Text can not be empty" };
             }
         } else {
+            try {
+                let json = JSON.parse(textValue);
+                if (!(json instanceof Array) || !(json.every(item => typeof item === 'string'))) {
+                    if (fileName) {
+                        return { [inputType]: `File '${fileName}' content is not an array of strings in JSON format.` };
+                    } else {
+                        return { [inputType]: `Text must be an array of strings in JSON format.` };
+                    }
+                } else if (json.length < 2) {
+                    if (fileName) {
+                        return {
+                            [inputType]:
+                                `The number of strings in the array of  File '${fileName}' content must be greater than 1.`
+                        };
+                    } else {
+                        return { [inputType]: `The number of strings in the array must be greater than 1.` };
+                    }
+                }
+            } catch (err) {
+                if (err instanceof SyntaxError) {
+                    if (fileName) {
+                        return { [inputType]: `File '${fileName}' content is not a valid JSON.` };
+                    } else {
+                        return { [inputType]: `Text is not a valid JSON.` };
+                    }
+                }
+
+                // if error is not syntax error, then it is not about valid or invalid json
+                return { [inputType]: `Something went wrong when trying to parse text to JSON. Please, try again.` };
+            }
+
             return { [inputType]: null };
         }
     }
@@ -283,20 +313,24 @@ class TopicAnalysisService extends React.Component {
     validateAllValues() {
         // utilize all validators function since we have to validate everything
         let found_errors = {};
-        
+
         if (this.state.methodName === "Select a method") {
             Object.assign(found_errors, { "methodName": "No method selected." });
         }
 
         for (let parameter of Object.values(Parameters)) {
             let state_error = this.validators[parameter]();
-            Object.assign(found_errors, state_error);
+            if (state_error[parameter]) {
+                Object.assign(found_errors, state_error);
+            }
         }
 
         let file_texts_errors = [];
         if (this.state.inputType === InputType.Text) {
             let state_error = this.validators[InputType.Text]();
-            Object.assign(found_errors, state_error);
+            if (state_error[InputType.Text]) {
+                Object.assign(found_errors, state_error);
+            }
         } else if (this.state.inputType === InputType.File) {
             if (this.state.file_texts.length === 0) {
                 let state_error = { [InputType.File]: "No file selected" }
@@ -311,7 +345,8 @@ class TopicAnalysisService extends React.Component {
         }
 
         this.setErrorState(found_errors);
-
+        console.log('found_errors: ', found_errors);
+        console.log('file_texts_errors: ', file_texts_errors);
         // check if there is an error property or errors object is empty
         return Object.keys(found_errors).length === 0 && file_texts_errors.length === 0;
     }
@@ -332,10 +367,17 @@ class TopicAnalysisService extends React.Component {
                 this.setErrorState(state_error);
             }
 
-            if (event_target_name === 'methodName' && this.state.inputType === InputType.Text) {
-                this.setState({ [InputType.Text]: DefaultInputs.docs[0] });
-                this.setErrorState({ [InputType.Text]: null, "methodName": null }); // discard error if there was one
+            if (event_target_name === 'methodName') {
+                let state_error = { "methodName": null }
+
+                if (this.state.inputType === InputType.Text) {
+                    state_error[InputType.Text] = null;
+                    this.setState({ [InputType.Text]: JSON.stringify(DefaultInputs.docs) });
+                }
+
+                this.setErrorState(state_error);    // discard errors if there were
             }
+
         });
     }
 
@@ -355,14 +397,20 @@ class TopicAnalysisService extends React.Component {
             let request_inputs = {};
 
             request_inputs.num_topics = this.state[Parameters.NumOfTopics];
-            request_inputs.topic_divider = this.state[Parameters.NumOfTopics];
-            request_inputs.maxiter = this.state[Parameters.NumOfTopics];
-            request_inputs.beta = this.state[Parameters.NumOfTopics];
+            request_inputs.topic_divider = this.state[Parameters.TopicDivider];
+            request_inputs.maxiter = this.state[Parameters.MaxIter];
+            request_inputs.beta = this.state[Parameters.Beta];
 
+            // since JSON format is validated, no parsing trouble is assumed when processing texts
             if (this.state.inputType === InputType.Text) {
-                request_inputs.docs = [this.state[InputType.Text]];
+                request_inputs.docs = JSON.parse(this.state[InputType.Text]);
             } else {
-                request_inputs.docs = this.state.file_texts.map(text => text.content);
+                let docs = [];
+                for (let file_text of this.state.file_texts) {
+                    docs = docs.concat(JSON.parse(file_text.content));
+                }
+
+                request_inputs.docs = docs;
             }
 
             return request_inputs;
@@ -370,10 +418,10 @@ class TopicAnalysisService extends React.Component {
 
         return null;
     }
-    
+
     submitAction() {
         let request_inputs = this.createRequestInputs();
-
+        console.log('request_inputs', request_inputs);
         if (request_inputs) {
             this.props.callApiCallback(this.state.serviceName,
                 this.state.methodName, request_inputs);
@@ -426,7 +474,7 @@ class TopicAnalysisService extends React.Component {
                 variant="outlined"
                 onChange={this.handleFormUpdate}
                 error={Boolean(this.state.errors[InputType.Text])}
-                helperText={this.state.errors[InputType.Text]}
+                helperText={this.state.errors[InputType.Text] || 'Text must be an array of strings in JSON format.'}
             />;
         } else if (this.state.inputType === InputType.File) {
             return (<div className={classes.formControl}>
@@ -453,8 +501,8 @@ class TopicAnalysisService extends React.Component {
     renderForm() {
         const { classes } = this.props;
 
-        // const service = this.props.protoSpec.findServiceByName(this.state.serviceName);
-        const serviceMethodNames = "service.methodNames";
+        const service = this.props.protoSpec.findServiceByName(this.state.serviceName);
+        const serviceMethodNames = service.methodNames;
 
         return (
             <MuiThemeProvider theme={theme}>
@@ -568,24 +616,17 @@ class TopicAnalysisService extends React.Component {
                         <Grid container className={classes.container}>
                             <Grid item sm={6} className={classes.item}>
                                 <Button variant="contained" color="primary" className={classes.button}
-                                    onClick={this.validateAllValues}>
-                                    <ValidateIcon className={classes.leftIcon} />
-                                    Validate Input
-                           </Button>
-                            </Grid>
-                            <Grid item sm={6} className={classes.item}>
-                                <Button variant="contained" color="primary" className={classes.button}
                                     onClick={this.resetInternalState}>
                                     <ResetIcon className={classes.leftIcon} />
-                                    Reset Form
-                           </Button>
+                                    Reset Form Inputs
+                                </Button>
                             </Grid>
-                            <Grid item sm={12} className={classes.item}>
+                            <Grid item sm={6} className={classes.item}>
                                 <Button variant="contained" color="primary" className={classes.button}
                                     onClick={this.submitAction}>
                                     <CallIcon className={classes.leftIcon} />
                                     Call Topic Analysis
-                           </Button>
+                                </Button>
                             </Grid>
                         </Grid>
                     </form>
@@ -595,24 +636,27 @@ class TopicAnalysisService extends React.Component {
     }
 
     renderComplete() {
+        const { classes } = this.props;
         let response = [this.props.response];
 
         response['handle'] = "https://tz-services-1.snet.sh:2298/topic-analysis/api/v1.0/results?handle=" + response['handle'];
         return (
-            <React.Fragment>
+            <MuiThemeProvider theme={theme}>
                 <Card
                     style={{
                         backgroundColor: "#deffde"
                     }}
                     elevation={0}
                 >
-                    <CardContent style={{ textAlign: "center" }}>
+                    <CardContent className={classes.centerText}>
                         <h4>
                             <CheckCircle style={{ fontSize: "36px", color: "#54C21F", textAlign: "center" }} />
                             <br />
                             Analysis started!
                         </h4>
-                        <p>Follow the link below to check the status of the analysis.</p>
+                        <Typography variant="body2">
+                            Follow the link below to check the status of the analysis.
+                        </Typography>
                         <p
                             style={{
                                 marginTop: "15px",
@@ -641,17 +685,16 @@ class TopicAnalysisService extends React.Component {
                 />
                 <ReactJson src={response} theme="apathy:inverted" />
                 <div className="row" align="center">
-                    <button type="button" className="btn btn-primary" onClick={this.download}>
+                    <Button variant="contained" color="primary" className={classes.button} onClick={this.download}>
                         Download Results JSON file
-                    </button>
+                    </Button>
                 </div>
-            </React.Fragment>
+            </MuiThemeProvider>
         );
     }
 
     render() {
-        // if (this.props.isComplete)
-        if (false)
+        if (this.props.isComplete)
             return (
                 <div>
                     {this.renderComplete()}
