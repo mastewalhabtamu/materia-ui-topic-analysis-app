@@ -29,7 +29,11 @@ import CallIcon from '@material-ui/icons/SettingsRemote';
 
 import TextUploader from "./analysis-helpers/TextUploader";
 
+/******************************************
+* Constants
+*******************************************/
 const InputType = { File: 'File Upload', Text: 'Textual Input' };
+
 const Modes = {
     CentralNodes: 'Central Nodes',
     PeripherialNodes: 'Peripherial nodes',
@@ -41,10 +45,21 @@ const Modes = {
     Hits: 'Hits',
 };
 
-const DefaultInputs = {
-
+const SampleGraph = {
+    "graph":
+    {
+        "nodes": ["1", "2", "3", "4", "5", "6", "7", "8"],
+        "edges": [
+            { "edge": ["1", "2"] }, { "edge": ["1", "4"] }, { "edge": ["2", "3"] }, { "edge": ["2", "5"] },
+            { "edge": ["3", "4"] }, { "edge": ["3", "6"] }, { "edge": ["2", "7"] }, { "edge": ["3", "8"] }
+        ]
+    }
 };
 
+
+/******************************************
+* Styles and theme
+*******************************************/
 const styles = theme => ({
     root: {
         display: 'flex',
@@ -109,6 +124,7 @@ class NodeImportance extends React.Component {
         super(props);
 
         this.handleFormUpdate = this.handleFormUpdate.bind(this);
+        this.handleCheckboxUpdate = this.handleCheckboxUpdate.bind(this);
 
         // setup validators for each form input
         this.validateTextInput = this.validateTextInput.bind(this);
@@ -144,13 +160,14 @@ class NodeImportance extends React.Component {
             [InputType.Text]: '',
 
             mode: Modes.CentralNodes,
+            useBounds: true,
 
             errors: {},
 
             fileAccept: "text/plain",
             inputType: InputType.Text,
         }
-    };
+    }
 
     // set error state appropriately
     // since error state is a nested object in state, it needs some workaround
@@ -274,7 +291,8 @@ class NodeImportance extends React.Component {
     handleFormUpdate(event) {
         const event_target_name = event.target.name;
         const event_target_value = event.target.value;
-        console.log('target_value', event.target.value);
+        console.log('target_value: ', event.target.value);
+        console.log('target type: ', typeof event.target.type);
         this.setState({ [event_target_name]: event_target_value }, () => {
             // run validation and other codes after ensuring state is updated
             if (event_target_name in this.validators) {
@@ -284,19 +302,42 @@ class NodeImportance extends React.Component {
                 this.setErrorState(state_error);
             }
 
-            if (event_target_name === 'methodName') {
-                let state_error = { "methodName": null }
+            if (event_target_name === 'methodName' || event_target_name === 'mode') {
+                let state_error = { event_target_name: null }
 
                 if (this.state.inputType === InputType.Text) {
                     state_error[InputType.Text] = null;
-                    this.setState({ [InputType.Text]: JSON.stringify(DefaultInputs.docs) });
+                    this.setState({ [InputType.Text]: JSON.stringify(SampleGraph, null, 4) });
                 }
 
                 this.setErrorState(state_error);    // discard errors if there were
-            } else if (event_target_name === 'mode') {
-                let state_error = { 'mode': null }
+            }
+        });
+    }
 
+    handleCheckboxUpdate(event) {
+        const event_target_name = event.target.name;
+        const event_target_value = event.target.checked;
+        console.log('target_value: ', event.target.value);
+        console.log('target checked: ', event.target.checked);
+        this.setState({ [event_target_name]: event_target_value }, () => {
+            // run validation and other codes after ensuring state is updated
+            if (event_target_name in this.validators) {
+                console.log('validation performed');
+                // validate form input change
+                let state_error = this.validators[event_target_name]();
                 this.setErrorState(state_error);
+            }
+
+            if (event_target_name === 'methodName' || event_target_name === 'mode') {
+                let state_error = { event_target_name: null }
+
+                if (this.state.inputType === InputType.Text) {
+                    state_error[InputType.Text] = null;
+                    this.setState({ [InputType.Text]: JSON.stringify(SampleGraph, null, 4) });
+                }
+
+                this.setErrorState(state_error);    // discard errors if there were
             }
         });
     }
@@ -325,7 +366,7 @@ class NodeImportance extends React.Component {
                     graphs = graphs.concat(JSON.parse(file_text.content));
                 }
 
-                request_inputs.graphs = graphs;
+                request_inputs.graph = graphs[0];
             }
 
             return request_inputs;
@@ -349,9 +390,7 @@ class NodeImportance extends React.Component {
     download() {
         const link = document.createElement('a');
         link.setAttribute("type", "hidden");
-        let resp = this.props.response;
-        resp['handle'] = "https://tz-services-1.snet.sh:2298/topic-analysis/api/v1.0/results?handle=" + resp['handle'];
-        link.setAttribute('href', "data:text/json," + JSON.stringify(resp));
+        link.setAttribute('href', "data:text/json," + JSON.stringify(this.props.response));
         link.setAttribute('download', 'result.json');
         document.body.appendChild(link);
         link.click();
@@ -419,6 +458,10 @@ class NodeImportance extends React.Component {
         }
     }
 
+    renderParameters(){
+
+    }
+
     renderForm() {
         const { classes } = this.props;
 
@@ -447,13 +490,21 @@ class NodeImportance extends React.Component {
                                         && <FormHelperText error>{this.state.errors['methodName']}</FormHelperText>}
                                 </FormControl>
                             </Grid>
-
+                            <Grid item sm={12} className={classes.item}>
+                                <FormControlLabel
+                                        control={
+                                            <Checkbox name="useBounds" checked={this.state.useBounds}
+                                             onChange={this.handleCheckboxUpdate}/>
+                                        }
+                                        label="Use bounds"
+                                    />
+                            </Grid>
                         </Grid>
 
                         <Divider variant="middle" className={classes.divider} />
 
                         <Grid container className={classes.container}>
-                            <Grid item sm={6} className={classes.item}>
+                            <Grid item sm className={classes.item}>
                                 <FormControl margin='normal' className={classes.formControl}>
                                     <InputLabel htmlFor="inputFormType">Input Type</InputLabel>
                                     <Select
@@ -468,7 +519,7 @@ class NodeImportance extends React.Component {
                                     </Select>
                                 </FormControl>
                             </Grid>
-                            <Grid item sm={6} className={classes.item}>
+                            <Grid item sm className={classes.item}>
                                 <FormControl margin='normal' className={classes.formControl}>
                                     <InputLabel htmlFor="mode">Mode</InputLabel>
                                     <Select
@@ -519,53 +570,10 @@ class NodeImportance extends React.Component {
 
     renderComplete() {
         const { classes } = this.props;
-        let response = [this.props.response];
-
-        response['handle'] = "https://tz-services-1.snet.sh:2298/topic-analysis/api/v1.0/results?handle=" + response['handle'];
+        
         return (
             <MuiThemeProvider theme={theme}>
-                <Card
-                    style={{
-                        backgroundColor: "#deffde"
-                    }}
-                    elevation={0}
-                >
-                    <CardContent className={classes.centerText}>
-                        <h4>
-                            <CheckCircle style={{ fontSize: "36px", color: "#54C21F", textAlign: "center" }} />
-                            <br />
-                            Analysis started!
-                        </h4>
-                        <Typography variant="body2">
-                            Follow the link below to check the status of the analysis.
-                        </Typography>
-                        <p
-                            style={{
-                                marginTop: "15px",
-                                backgroundColor: "#fff",
-                                border: "5px",
-                                padding: "10px",
-                                borderRadius: "5px"
-                            }}
-                        >
-                            <a
-                                rel="noopener noreferrer"
-                                target="_blank"
-                                href={"https://tz-services-1.snet.sh:2298/topic-analysis/api/v1.0/results?handle=" + this.props.response['handle']}
-                            >
-                                {"https://tz-services-1.snet.sh:2298/topic-analysis/api/v1.0/results?handle=" + this.props.response['handle']}
-                            </a>
-                        </p>
-                    </CardContent>
-                </Card>
-                <hr
-                    style={{
-                        color: 'red',
-                        backgroundColor: 'color',
-                        height: 5
-                    }}
-                />
-                <ReactJson src={response} theme="apathy:inverted" />
+                <ReactJson src={this.props.response} theme="apathy:inverted" />
                 <div className="row" align="center">
                     <Button variant="contained" color="primary" className={classes.button} onClick={this.download}>
                         Download Results JSON file

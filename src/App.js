@@ -542,7 +542,9 @@ class TopicAnalysisService extends React.Component {
                                 </FormControl>
                             </Grid>
                         </Grid>
+                        
                         <Divider variant="middle" className={classes.divider} />
+
                         <Grid container className={classes.container}>
                             <Grid item sm={12} className={classes.item}>
                                 {this.renderTextDataInput(classes)}
@@ -550,6 +552,7 @@ class TopicAnalysisService extends React.Component {
                         </Grid>
 
                         <Divider variant="middle" className={classes.divider} />
+                        
                         <Grid container className={classes.container}>
                             <Grid item sm={6} className={classes.item}>
                                 <TextField className={classes.formControl}
