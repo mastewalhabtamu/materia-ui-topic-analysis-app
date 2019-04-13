@@ -45,6 +45,37 @@ const Modes = {
     Hits: 'Hits',
 };
 
+// parameters for different modes(all are boolean unless stated otherwise)
+const Parameters = {
+    useBounds: 'useBounds',
+    distance: 'distance',
+    wf_improved: 'wf_improved',
+    reverse: 'reverse',
+    directed: 'directed',
+    type: 'type',
+    normalized: 'normalized',
+    weight: 'weight',
+    endpoints: 'endpoints',
+    seed: 'seed', // number
+    k: 'k', // number
+}
+
+const CheckboxParameters = {
+    [Parameters.useBounds]: { label: 'Use Bounds' },
+    [Parameters.distance]: { label: 'Use Distance' },
+    [Parameters.wf_improved]: { label: 'Use wf_improved' },
+    [Parameters.reverse]: { label: 'Reverse' },
+    [Parameters.directed]: { label: 'Directed Graph' },
+    [Parameters.normalized]: { label: 'Normalized' },
+    [Parameters.weight]: { label: 'Use Weight' },
+    [Parameters.endpoints]: { label: 'Endpoints' },
+}
+
+const NumberParameters = {
+    [Parameters.seed]: { label: 'Seed', helperText: 'Random number generator' }, // number
+    [Parameters.k]: { label: 'K', helperText: 'K' }, // number
+}
+
 const SampleGraph = {
     "graph":
     {
@@ -137,13 +168,15 @@ class NodeImportance extends React.Component {
         this.validateAllValues = this.validateAllValues.bind(this);
         this.createRequestInputs = this.createRequestInputs.bind(this);
 
-        this.state = this.getInitialState();
         this.resetInternalState = this.resetInternalState.bind(this);
+        this.setParameterState = this.setParameterState.bind(this);
 
         this.handleUploadedTexts = this.handleUploadedTexts.bind(this);
         this.submitAction = this.submitAction.bind(this);
 
         this.download = this.download.bind(this);
+
+        this.state = this.getInitialState();
     }
 
     /**************************************
@@ -160,7 +193,7 @@ class NodeImportance extends React.Component {
             [InputType.Text]: '',
 
             mode: Modes.CentralNodes,
-            useBounds: true,
+            [Parameters.useBounds]: false,
 
             errors: {},
 
@@ -179,6 +212,32 @@ class NodeImportance extends React.Component {
 
     resetInternalState() {
         this.setState(this.getInitialState());
+    }
+
+    setParameterState(mode) {
+        let parameters = {};
+        for (let param in Parameters) {
+            parameters[param] = undefined;
+        }
+
+        if (mode === Parameters.CentralNodes || mode === Parameters.PeripherialNodes) {
+            parameters[Parameters.useBounds] = false;
+        } else if (mode === Parameters.ClosenessCentrality) {
+            parameters[Parameters.distance] = false;
+            parameters[Parameters.wf_improved] = false;
+            parameters[Parameters.reverse] = false;
+            parameters[Parameters.directed] = false;
+        } else if (mode === Parameters.BetweennessCentrality) {
+            parameters[Parameters.type] = 'node';
+            parameters[Parameters.k] = 0;
+            parameters[Parameters.normalized] = true;
+            parameters[Parameters.weight] = false;
+            parameters[Parameters.endpoints] = false;
+            parameters[Parameters.seed] = 0;
+            parameters[Parameters.directed] = false;
+        }
+
+        this.setState(parameters);
     }
 
     /****************************************
@@ -291,8 +350,10 @@ class NodeImportance extends React.Component {
     handleFormUpdate(event) {
         const event_target_name = event.target.name;
         const event_target_value = event.target.value;
+        console.log('target: ', event.target);
         console.log('target_value: ', event.target.value);
-        console.log('target type: ', typeof event.target.type);
+        console.log('target_name: ', event.target.name);
+        console.log('target type: ', event.target.type);
         this.setState({ [event_target_name]: event_target_value }, () => {
             // run validation and other codes after ensuring state is updated
             if (event_target_name in this.validators) {
@@ -311,6 +372,10 @@ class NodeImportance extends React.Component {
                 }
 
                 this.setErrorState(state_error);    // discard errors if there were
+
+                if (event_target_name === 'mode') {
+                    this.setParameterState(event_target_value);
+                }
             }
         });
     }
@@ -320,6 +385,7 @@ class NodeImportance extends React.Component {
         const event_target_value = event.target.checked;
         console.log('target_value: ', event.target.value);
         console.log('target checked: ', event.target.checked);
+        console.log('target type: ', event.target.type);
         this.setState({ [event_target_name]: event_target_value }, () => {
             // run validation and other codes after ensuring state is updated
             if (event_target_name in this.validators) {
@@ -458,8 +524,73 @@ class NodeImportance extends React.Component {
         }
     }
 
-    renderParameters(){
+    renderParameters() {
+        const { classes } = this.props;
 
+        let rendered_parameters = [];
+        for (let checkbox_param in CheckboxParameters) {
+            if (this.state[checkbox_param] !== undefined) {
+                rendered_parameters.push(
+                    <Grid item sm={6} className={classes.item}>
+                        <FormControlLabel className={classes.formControl}
+                            control={
+                                <Checkbox name={checkbox_param} id={checkbox_param}
+                                    checked={this.state[checkbox_param]}
+                                    onChange={this.handleCheckboxUpdate} />
+                            }
+                            label={CheckboxParameters[checkbox_param].label}
+                        />
+                    </Grid>
+                );
+            }
+        }
+
+        for (let num_param in NumberParameters) {
+            if (this.state[num_param] !== undefined) {
+                rendered_parameters.push(
+                    <Grid item sm={6} className={classes.item}>
+                        <TextField className={classes.formControl}
+                            id={num_param}
+                            name={num_param}
+                            label={NumberParameters[num_param].label}
+                            type="number"
+                            margin="normal"
+                            value={this.state[num_param]}
+                            onChange={this.handleFormUpdate}
+                            error={Boolean(this.state.errors[num_param])}
+                            helperText={(Boolean(this.state.errors[num_param]))
+                                ? this.state.errors[num_param]
+                                : NumberParameters[num_param].helperText}
+                        />
+                    </Grid>
+                );
+            }
+        }
+
+        if (this.state[Parameters.type] !== undefined) {
+            rendered_parameters.push(
+                <Grid item sm={6} className={classes.item}>
+                    <FormControl className={classes.formControl} error={Boolean(this.state.errors[Parameters.type])}>
+                        <InputLabel htmlFor={Parameters.type}>Type</InputLabel>
+                        <Select
+                            value={this.state.type}
+                            onChange={this.handleFormUpdate}
+                            inputProps={{
+                                name: Parameters.type,
+                                id: Parameters.type,
+                            }}
+                        >
+                            <MenuItem value="node" key={1}>Node</MenuItem>
+                            <MenuItem value="edge" key={2}>Edge</MenuItem>
+                        </Select>
+                        {this.state.errors[Parameters.type]
+                            && <FormHelperText error>{this.state.errors[Parameters.type]}</FormHelperText>}
+                    </FormControl>
+                </Grid>
+            );
+        }
+
+        return rendered_parameters;
     }
 
     renderForm() {
@@ -492,12 +623,12 @@ class NodeImportance extends React.Component {
                             </Grid>
                             <Grid item sm={12} className={classes.item}>
                                 <FormControlLabel
-                                        control={
-                                            <Checkbox name="useBounds" checked={this.state.useBounds}
-                                             onChange={this.handleCheckboxUpdate}/>
-                                        }
-                                        label="Use bounds"
-                                    />
+                                    control={
+                                        <Checkbox name="useBounds" checked={this.state.useBounds}
+                                            onChange={this.handleCheckboxUpdate} />
+                                    }
+                                    label="Use bounds"
+                                />
                             </Grid>
                         </Grid>
 
@@ -546,6 +677,34 @@ class NodeImportance extends React.Component {
 
                         <Divider variant="middle" className={classes.divider} />
 
+                        {/* Parameters Section */}
+                        {
+                            this.state.mode !== Modes.DegreeCentrality &&
+                            <React.Fragment>
+                                <Grid container className={classes.container}>
+                                    {Object.keys(CheckboxParameters).map((checkbox_param, index) => 
+                                        this.state[checkbox_param] !== undefined &&
+                                            <React.Fragment>
+                                                <Grid item sm={6} className={classes.item}>
+                                                    <FormControlLabel className={classes.formControl}
+                                                        control={
+                                                            <Checkbox name={checkbox_param} id={checkbox_param}
+                                                                checked={this.state[checkbox_param]}
+                                                                onChange={this.handleCheckboxUpdate} />
+                                                        }
+                                                        label={CheckboxParameters[checkbox_param].label}
+                                                    />
+                                                </Grid>
+                                            </React.Fragment>
+                                    )}
+                                    {/* {this.renderParameters()} */}
+                                </Grid>
+
+                                <Divider variant="middle" className={classes.divider} />
+                            </React.Fragment>
+                        }
+
+
                         <Grid container className={classes.container}>
                             <Grid item sm={6} className={classes.item}>
                                 <Button variant="contained" color="primary" className={classes.button}
@@ -570,7 +729,7 @@ class NodeImportance extends React.Component {
 
     renderComplete() {
         const { classes } = this.props;
-        
+
         return (
             <MuiThemeProvider theme={theme}>
                 <ReactJson src={this.props.response} theme="apathy:inverted" />
