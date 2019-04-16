@@ -162,7 +162,7 @@ class TextUploader extends React.Component {
             <React.Fragment>
                 <Dropzone
                     name="dataset"
-                    multiple={true}
+                    multiple={this.props.multiple}
                     onDrop={
                         files => {
                             // reset texts to empty and start processing uploaded files
