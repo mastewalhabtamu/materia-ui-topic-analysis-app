@@ -9,7 +9,7 @@
     "react-dom": "^16.8.5",
     "react-dropzone": "^10.0.6",
     "react-json-view": "^1.19.1",
-    "react-scripts": "2.1.8"
+    "react-scripts": "5.0.1"
   },
   "scripts": {
     "start": "react-scripts start",
